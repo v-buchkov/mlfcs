@@ -21,7 +21,9 @@ class MlMetrics:
         metrics = {}
         for metric in self._ml_metrics:
             metric_instance = metric()
-            metrics[metric_instance.__class__.__name__] = metric_instance(y_true, y_pred).item()
+            metrics[metric_instance.__class__.__name__] = metric_instance(
+                y_true, y_pred
+            ).item()
 
         return metrics
 

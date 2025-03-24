@@ -7,9 +7,7 @@ from vol_predict.models.abstract_predictor import AbstractPredictor
 
 
 class MLPPredictor(AbstractPredictor):
-    def __init__(
-        self, n_features: int, *args, **kwargs
-    ):
+    def __init__(self, n_features: int, *args, **kwargs):
         super().__init__()
 
         self.model = nn.Linear(n_features, 1)
