@@ -177,3 +177,5 @@ prod.env
 password.sh
 **/.idea
 **/**.pkl
+data/
+!/data/output/data_df.csv
