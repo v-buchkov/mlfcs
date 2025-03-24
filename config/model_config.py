@@ -14,7 +14,8 @@ class ModelConfig:
     lr: float = 1e-3
     hidden_size: int = 64
 
-    n_epochs: int = 100
+    n_epochs: int = 10
+    n_features: int = 23
 
     optimizer: Type[torch.optim.Optimizer] = torch.optim.SGD
 
@@ -30,4 +31,4 @@ class ModelConfig:
     vol_calc_method: VolatilityMethod = VolatilityMethod("squared_returns")
 
     def dict(self):
-        return {k: str(v) for k, v in asdict(self).items()}
+        return {k: v for k, v in asdict(self).items()}

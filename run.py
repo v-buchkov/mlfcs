@@ -43,13 +43,16 @@ def run_backtest(
 
 if __name__ == "__main__":
     from config.model_config import ModelConfig
-    from config.experiment_config import ExperimentConfig
+    from config.experiment_config import ExperimentConfig, AvailableDatasets
     from vol_predict.features.preprocessor import OneToOnePreprocessor
 
     from vol_predict.models.dl.mlp_predictor import MLPPredictor as Model
     from vol_predict.models.baselines.naive_predictor import NaivePredictor as Baseline
 
+    print(AvailableDatasets)
+
     config = ExperimentConfig()
+    config.DATASET = AvailableDatasets.SPX
     config.ASSET_UNIVERSE = ("spx",)
 
     model_params = ModelConfig()
@@ -58,7 +61,7 @@ if __name__ == "__main__":
     # Handles the features
     feature_processor = OneToOnePreprocessor()
 
-    runner = initialize_runner(
+    model_runner = initialize_runner(
         model_config=model_params,
         preprocessor=feature_processor,
         experiment_config=config,
@@ -69,7 +72,7 @@ if __name__ == "__main__":
         baseline_cls=Baseline,
         model_config=model_params,
         baseline_config=baseline_params,
-        runner=runner,
+        runner=model_runner,
     )
 
     print(result)

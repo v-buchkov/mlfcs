@@ -21,9 +21,11 @@ class Trainer:
         val_loader: DataLoader,
         model_config: ModelConfig,
         experiment_config: ExperimentConfig,
+        save_model: bool = False,
     ):
         self.model_config = model_config
         self.experiment_config = experiment_config
+        self.save_model = save_model
 
         self._train_loader = train_loader
         self._val_loader = val_loader
@@ -34,7 +36,7 @@ class Trainer:
     def _train(
         self,
         model: AbstractPredictor,
-        optimizer: torch.optim.optimizer,
+        optimizer: torch.optim.Optimizer,
         scheduler: Optional[Any],
         train_loader: DataLoader,
         val_loader: DataLoader,
@@ -43,7 +45,7 @@ class Trainer:
     ):
         train_losses, val_losses = [], []
         train_preds, val_preds = [], []
-        criterion = self.model_config.loss.to(self.experiment_config.DEVICE)
+        criterion = self.model_config.loss.value().to(self.experiment_config.DEVICE)
 
         assert isinstance(criterion, AbstractCustomLoss), (
             f"{criterion.__class__.__name__} is not a subclass of AbstractCustomLoss!"
@@ -69,13 +71,16 @@ class Trainer:
             train_losses += [train_loss]
             val_losses += [val_loss]
 
-            train_preds += train_pred
-            val_preds += val_pred
+            train_preds.append(train_pred)
+            val_preds.append(val_pred)
 
             # TODO @V: average pred into plot
             plot_losses(train_losses, val_losses, None, None)
 
-        return train_losses, val_losses, np.stack(train_preds), np.stack(val_preds)
+        train_preds = np.concatenate(train_preds, axis=0)
+        val_preds = np.concatenate(val_preds, axis=0)
+
+        return train_losses, val_losses, train_preds, val_preds
 
     def __call__(self, model: AbstractPredictor, n_epochs: int | None = None) -> None:
         self.run(model, n_epochs)
@@ -105,7 +110,8 @@ class Trainer:
             )
         )
 
-        self.save(model, self.experiment_config.PATH_OUTPUT)
+        if self.save_model:
+            self.save(model, self.experiment_config.PATH_OUTPUT)
 
     @staticmethod
     def save(model: AbstractPredictor, path: Path) -> None:

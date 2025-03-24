@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from abc import ABC, abstractmethod
 
-if TYPE_CHECKING:
-    import torch
-    import torch.nn as nn
+import torch
+import torch.nn as nn
 
 
 class AbstractPredictor(nn.Module, ABC):
@@ -15,6 +12,8 @@ class AbstractPredictor(nn.Module, ABC):
 
         self.hidden = None
         self.memory = None
+
+        self._dummy_param = nn.Parameter(torch.empty(0))
 
     def forward(
         self,

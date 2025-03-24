@@ -108,6 +108,7 @@ class Runner:
                     f"Test data on {self.test_data.index.min()} to {self.test_data.index.max()}"
                 )  # noqa: T201
             print(f"Num Train Iterations: {len(self.train_data)}")  # noqa: T201
+            print(f"Num Features: {self.train_data.shape[1]}")  # noqa: T201
 
     def _get_dataloaders(self) -> tuple[DataLoader, DataLoader, DataLoader]:
         train_set = ReturnsDataset(

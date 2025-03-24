@@ -20,7 +20,8 @@ class MlMetrics:
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> dict[str, float]:
         metrics = {}
         for metric in self._ml_metrics:
-            metrics[type(metric).__name__] = metric(y_true, y_pred).item()
+            metric_instance = metric()
+            metrics[metric_instance.__class__.__name__] = metric_instance(y_true, y_pred).item()
 
         return metrics
 
@@ -63,11 +64,11 @@ class Assessor:
         self.ml_metrics = MlMetrics(model_config.metrics)
 
     def run(self, model: AbstractPredictor) -> AssessmentResult:
-        loss = self.model_config.loss.to(self.experiment_config.DEVICE)
+        loss = self.model_config.loss.value().to(self.experiment_config.DEVICE)
         model_loss, model_preds = validation_epoch(model, loss, self.test_loader)
 
-        model_preds_tensor = torch.tensor(model_preds[:, 2])
-        model_true_tensor = torch.tensor(model_preds[:, 1])
+        model_preds_tensor = torch.tensor(model_preds[:, 1])
+        model_true_tensor = torch.tensor(model_preds[:, 0])
 
         return AssessmentResult(
             mean_model_loss=model_loss,

@@ -11,7 +11,7 @@ import torch
 class AvailableDatasets(Enum):
     GBM = Path("gbm") / "gbm.csv"
     BITCOIN = ""
-    SPX = Path("spx") / "final_df.csv"
+    SPX = Path("spx") / "data_df.csv"
 
 
 @dataclass
@@ -33,10 +33,12 @@ class ExperimentConfig:
         metadata={"docs": "Tradeable assets tuple"},
     )
 
+    N_FEATURES: int = field(default=12, metadata={"docs": "Fix random seed"})
+
     RANDOM_SEED: int = field(default=12, metadata={"docs": "Fix random seed"})
 
     TRAIN_START_DATE: pd.Timestamp = field(
-        default=pd.to_datetime("1980-01-01"),
+        default=pd.to_datetime("2004-01-01"),
         metadata={"docs": "Date to start training"},
     )
 

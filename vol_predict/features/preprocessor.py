@@ -21,10 +21,10 @@ class OneToOnePreprocessor(BasePreprocessor):
         self.n_lags = 0
 
     def transform(self, features: pd.DataFrame) -> pd.DataFrame:
-        columns = features.columns
         if self.feature_names is not None:
             return features[self.feature_names]
         if self.exclude_names is not None:
+            columns = features.columns
             return features[columns.difference(self.exclude_names)]
         return features
 

@@ -16,27 +16,24 @@ class ReturnsDataset(Dataset):
     ):
         self.preprocessor = preprocessor
 
-        self.dates = returns.log_returns.iloc[1:].to_numpy()
-        self.returns = returns.log_returns.iloc[1:].to_numpy()
-        self.past_returns = returns.log_returns.shift(1).iloc[1:].to_numpy()
-        self.features = features.iloc[1:].to_numpy()
+        self.returns = returns.log_returns.iloc[1:]
+        self.past_returns = returns.log_returns.shift(1).iloc[1:]
+        self.features = features.iloc[1:]
 
     def __len__(self):
         return len(self.returns)
 
     def __getitem__(
         self, idx: int
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        dates = self.dates[idx]
-        features = self.features[idx]
-        returns = self.returns[idx]
-        past_returns = self.past_returns[idx]
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        features = self.features.iloc[idx]
+        returns = self.returns.iloc[idx]
+        past_returns = self.past_returns.iloc[idx]
 
         features = self.preprocessor.transform(features)
 
-        dates = torch.Tensor(dates).to(torch.float32)
-        features = torch.Tensor(features).to(torch.float32)
-        returns = torch.Tensor(returns).to(torch.float32)
-        past_returns = torch.Tensor(past_returns).to(torch.float32)
+        features = torch.Tensor(features.to_numpy()).to(torch.float32)
+        returns = torch.Tensor(returns.to_numpy()).to(torch.float32)
+        past_returns = torch.Tensor(past_returns.to_numpy()).to(torch.float32)
 
-        return dates, features, returns, past_returns
+        return features, returns, past_returns

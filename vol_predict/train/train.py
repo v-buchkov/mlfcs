@@ -22,6 +22,10 @@ def plot_losses(
     clear_output()
     n_cols = 2 if train_preds is not None or val_preds is not None else 1
     fig, axs = plt.subplots(1, n_cols, figsize=(13, 4))
+
+    if n_cols == 1:
+        axs = [axs]
+
     axs[0].plot(range(1, len(train_losses) + 1), train_losses, label="train")
     axs[0].plot(range(1, len(val_losses) + 1), val_losses, label="val")
     axs[0].set_ylabel("Loss")
@@ -39,7 +43,7 @@ def plot_losses(
             label="val",
         )
 
-    if train_preds is None or val_preds is None:
+    if train_preds is not None or val_preds is not None:
         axs[1].set_ylabel("Annualized Volatility")
 
     for ax in axs:
@@ -74,37 +78,41 @@ def train_epoch(
     train_loss = 0.0
     pred_path = []
     model.train()
-    for dates, features, past_returns, true_returns in iterator:
+    for features, past_returns, true_returns in iterator:
         optimizer.zero_grad()
 
         features = features.to(device)
+        past_returns = past_returns.to(device)
         true_returns = true_returns.to(device)
 
         if has_cuda:
             with torch.autocast(device_type="cuda", dtype=torch.float16):
                 pred_vol = model(features=features, past_returns=past_returns)
+
                 loss = criterion(true_returns, pred_vol)
 
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
+            if loss.requires_grad:
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
 
             scaler.update()
         else:
             pred_vol = model(features=features, past_returns=past_returns)
             loss = criterion(true_returns, pred_vol)
 
-            loss.backward()
-            optimizer.step()
+            if loss.requires_grad:
+                loss.backward()
+                optimizer.step()
 
         train_loss += loss.item()
         prediction_points = np.concatenate(
-            (dates, pred_vol.detach().cpu().numpy()), axis=1
+            (true_returns.cpu().numpy(), pred_vol.detach().cpu().numpy()), axis=1
         )
         pred_path.append(prediction_points)
 
     train_loss /= len(loader.dataset)
 
-    return train_loss, np.stack(pred_path)
+    return train_loss, np.concatenate(pred_path, axis=0)
 
 
 @torch.no_grad()
@@ -124,8 +132,9 @@ def validation_epoch(
     val_loss = 0.0
     model.eval()
     pred_path = []
-    for dates, features, past_returns, true_returns in iterator:
+    for features, past_returns, true_returns in iterator:
         features = features.to(device)
+        past_returns = past_returns.to(device)
         true_returns = true_returns.to(device)
 
         pred_vol = model(features=features, past_returns=past_returns)
@@ -134,10 +143,10 @@ def validation_epoch(
         val_loss += loss.item()
 
         prediction_points = np.concatenate(
-            (dates, true_returns.cpu().numpy(), pred_vol.detach().cpu().numpy()), axis=1
+            (true_returns.cpu().numpy(), pred_vol.detach().cpu().numpy()), axis=1
         )
         pred_path.append(prediction_points)
 
     val_loss /= len(loader.dataset)
 
-    return val_loss, np.stack(pred_path)
+    return val_loss, np.concatenate(pred_path, axis=0)
