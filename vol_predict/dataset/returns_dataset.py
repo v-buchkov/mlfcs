@@ -34,4 +34,4 @@ class ReturnsDataset(Dataset):
         returns = torch.Tensor(returns.to_numpy()).to(torch.float32)
         past_returns = torch.Tensor(past_returns.to_numpy()).to(torch.float32)
 
-        return features, returns, past_returns
+        return features, past_returns, returns

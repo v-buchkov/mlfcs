@@ -11,7 +11,6 @@ class MLP(nn.Module):
             layers.append(nn.Linear(in_size, out_size))
             if i < len(sizes) - 2:
                 layers.append(nn.LeakyReLU(0.1))
-                layers.append(nn.Dropout(0.1))
         self.layers = nn.Sequential(*layers)
 
     def forward(self, x):

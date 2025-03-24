@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import torch
+import torch.nn as nn
 
 from vol_predict.models.dl.mlp import MLP
 from vol_predict.models.abstract_predictor import AbstractPredictor
@@ -20,4 +21,5 @@ class MLPPredictor(AbstractPredictor):
         features: torch.Tensor,
     ) -> torch.Tensor:
         full_features = torch.cat([past_returns, features], dim=1)
-        return self.model(full_features)
+        std = self.model(full_features)
+        return nn.Softplus()(std)
