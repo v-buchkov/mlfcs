@@ -14,8 +14,7 @@ class ModelConfig:
     lr: float = 1e-3
     hidden_size: int = 64
 
-    train_epochs: int = 100
-    val_epochs: int = 100
+    n_epochs: int = 100
 
     optimizer: Type[torch.optim.Optimizer] = torch.optim.SGD
 

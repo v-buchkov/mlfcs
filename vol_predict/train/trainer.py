@@ -87,7 +87,7 @@ class Trainer:
         )
 
         if n_epochs is None:
-            n_epochs = self.model_config.train_epochs
+            n_epochs = self.model_config.n_epochs
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=n_epochs
