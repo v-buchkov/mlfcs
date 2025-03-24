@@ -7,5 +7,7 @@ class NormalNLL(AbstractCustomLoss):
     def __init__(self):
         super().__init__()
 
-    def forward(self, true_returns: torch.Tensor, pred_vol: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+    def forward(
+        self, true_returns: torch.Tensor, pred_vol: torch.Tensor, *args, **kwargs
+    ) -> torch.Tensor:
         raise NotImplementedError

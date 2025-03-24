@@ -58,23 +58,37 @@ class Runner:
         )
 
     def _load_df(self) -> pd.DataFrame:
-        data_df = pd.read_csv(self.experiment_config.PATH_DATA / self.experiment_config.DATASET.value)
+        data_df = pd.read_csv(
+            self.experiment_config.PATH_DATA / self.experiment_config.DATASET.value
+        )
         data_df["date"] = pd.to_datetime(data_df["date"])
         return data_df.set_index("date")
 
     def _initialize(self):
         data_df = self._load_df()
 
-        self.train_data = data_df.loc[self.experiment_config.TRAIN_START_DATE:self.experiment_config.VAL_START_DATE]
-        self.val_data = data_df.loc[self.experiment_config.VAL_START_DATE:self.experiment_config.TEST_START_DATE]
-        self.test_data = data_df.loc[self.experiment_config.TEST_START_DATE:]
+        self.train_data = data_df.loc[
+            self.experiment_config.TRAIN_START_DATE : self.experiment_config.VAL_START_DATE
+        ]
+        self.val_data = data_df.loc[
+            self.experiment_config.VAL_START_DATE : self.experiment_config.TEST_START_DATE
+        ]
+        self.test_data = data_df.loc[self.experiment_config.TEST_START_DATE :]
 
         if self.experiment_config.ASSET_UNIVERSE is None:
-            self.experiment_config.ASSET_UNIVERSE = tuple(set(self.train_data.columns.tolist()))
+            self.experiment_config.ASSET_UNIVERSE = tuple(
+                set(self.train_data.columns.tolist())
+            )
 
-        self.train_returns = Returns(self.train_data.loc[:, self.experiment_config.ASSET_UNIVERSE].iloc[1:])
-        self.val_returns = Returns(self.val_data.loc[:, self.experiment_config.ASSET_UNIVERSE].iloc[1:])
-        self.test_returns = Returns(self.test_data.loc[:, self.experiment_config.ASSET_UNIVERSE].iloc[1:])
+        self.train_returns = Returns(
+            self.train_data.loc[:, self.experiment_config.ASSET_UNIVERSE].iloc[1:]
+        )
+        self.val_returns = Returns(
+            self.val_data.loc[:, self.experiment_config.ASSET_UNIVERSE].iloc[1:]
+        )
+        self.test_returns = Returns(
+            self.test_data.loc[:, self.experiment_config.ASSET_UNIVERSE].iloc[1:]
+        )
 
         self.train_data = self.train_data.shift(1).iloc[1:]
         self.val_data = self.val_data.shift(1).iloc[1:]
@@ -107,41 +121,69 @@ class Runner:
         )
 
         train_loader = DataLoader(
-            train_set, batch_size=self.model_config.BATCH_SIZE, shuffle=False, drop_last=False
+            train_set,
+            batch_size=self.model_config.BATCH_SIZE,
+            shuffle=False,
+            drop_last=False,
         )
         val_loader = DataLoader(
-            val_set, batch_size=self.model_config.BATCH_SIZE, shuffle=False, drop_last=False
+            val_set,
+            batch_size=self.model_config.BATCH_SIZE,
+            shuffle=False,
+            drop_last=False,
         )
         test_loader = DataLoader(
-            test_set, batch_size=self.model_config.BATCH_SIZE, shuffle=False, drop_last=False
+            test_set,
+            batch_size=self.model_config.BATCH_SIZE,
+            shuffle=False,
+            drop_last=False,
         )
         return train_loader, val_loader, test_loader
 
     def available_features(self) -> list[str]:
         return self.train_data.columns.tolist()
 
-    def train(self, model: AbstractPredictor, baseline: AbstractPredictor, n_epochs: int | None = None) -> None:
+    def train(
+        self,
+        model: AbstractPredictor,
+        baseline: AbstractPredictor,
+        n_epochs: int | None = None,
+    ) -> None:
         self._model_trainer(model, n_epochs)
         self._baseline_trainer(baseline, n_epochs)
 
-    def assess(self, model: AbstractPredictor, baseline: AbstractPredictor) -> RunResult:
+    def assess(
+        self, model: AbstractPredictor, baseline: AbstractPredictor
+    ) -> RunResult:
         model_assessment = self._assessor(model)
-        baseline_assessment= self._assessor(baseline)
+        baseline_assessment = self._assessor(baseline)
 
         return RunResult(
             model_result=model_assessment,
             baseline_result=baseline_assessment,
         )
 
-    def run(self, model: AbstractPredictor, baseline: AbstractPredictor, n_epochs: int | None = None) -> RunResult:
+    def run(
+        self,
+        model: AbstractPredictor,
+        baseline: AbstractPredictor,
+        n_epochs: int | None = None,
+    ) -> RunResult:
         self.train(model=model, baseline=baseline, n_epochs=n_epochs)
         return self.assess(model=model, baseline=baseline)
 
-    def __call__(self, model: AbstractPredictor, baseline: AbstractPredictor, n_epochs: int | None = None) -> RunResult:
+    def __call__(
+        self,
+        model: AbstractPredictor,
+        baseline: AbstractPredictor,
+        n_epochs: int | None = None,
+    ) -> RunResult:
         return self.run(model=model, baseline=baseline, n_epochs=n_epochs)
 
     @staticmethod
-    def _plot_criterion_distr(model_criterion: np.ndarray, baseline_criterion: np.ndarray) -> None:
+    def _plot_criterion_distr(
+        model_criterion: np.ndarray, baseline_criterion: np.ndarray
+    ) -> None:
         bins = np.linspace(-0.25, 0.25, 100)
 
         plt.hist(model_criterion, bins, alpha=0.5, label="model")
@@ -159,7 +201,9 @@ class Runner:
         plt.show()
 
     @staticmethod
-    def _plot_preds_ts(model_criterion: np.ndarray, baseline_criterion: np.ndarray) -> None:
+    def _plot_preds_ts(
+        model_criterion: np.ndarray, baseline_criterion: np.ndarray
+    ) -> None:
         bins = np.linspace(-0.25, 0.25, 100)
 
         plt.hist(model_criterion, bins, alpha=0.5, label="model")

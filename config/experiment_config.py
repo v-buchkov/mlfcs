@@ -9,9 +9,9 @@ import torch
 
 
 class AvailableDatasets(Enum):
-    GBM = "gbm.csv"
+    GBM = Path("gbm") / "gbm.csv"
     BITCOIN = ""
-    SPX = ""
+    SPX = Path("spx") / "final_df.csv"
 
 
 @dataclass
@@ -23,7 +23,9 @@ class ExperimentConfig:
 
     RETRAIN_NUM_PERIODS: bool | None = field(
         default=None,
-        metadata={"docs": "Number of retrain periods. If `None`, then the model is tested on the whole Test dataset without retraining"},
+        metadata={
+            "docs": "Number of retrain periods. If `None`, then the model is tested on the whole Test dataset without retraining"
+        },
     )
 
     RANDOM_SEED: int = field(default=12, metadata={"docs": "Fix random seed"})

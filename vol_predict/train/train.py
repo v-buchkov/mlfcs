@@ -27,9 +27,17 @@ def plot_losses(
     axs[0].set_ylabel("Loss")
 
     if train_preds is not None:
-        axs[1].plot(range(1, len(train_preds) + 1), np.array(train_preds) * np.sqrt(n_days), label="train")
+        axs[1].plot(
+            range(1, len(train_preds) + 1),
+            np.array(train_preds) * np.sqrt(n_days),
+            label="train",
+        )
     if val_preds is not None:
-        axs[1].plot(range(1, len(val_preds) + 1), np.array(val_preds) * np.sqrt(n_days), label="val")
+        axs[1].plot(
+            range(1, len(val_preds) + 1),
+            np.array(val_preds) * np.sqrt(n_days),
+            label="val",
+        )
 
     if train_preds is None or val_preds is None:
         axs[1].set_ylabel("Annualized Volatility")
@@ -89,7 +97,9 @@ def train_epoch(
             optimizer.step()
 
         train_loss += loss.item()
-        prediction_points = np.concatenate((dates, pred_vol.detach().cpu().numpy()), axis=1)
+        prediction_points = np.concatenate(
+            (dates, pred_vol.detach().cpu().numpy()), axis=1
+        )
         pred_path.append(prediction_points)
 
     train_loss /= len(loader.dataset)
@@ -123,7 +133,9 @@ def validation_epoch(
 
         val_loss += loss.item()
 
-        prediction_points = np.concatenate((dates, true_returns.cpu().numpy(), pred_vol.detach().cpu().numpy()), axis=1)
+        prediction_points = np.concatenate(
+            (dates, true_returns.cpu().numpy(), pred_vol.detach().cpu().numpy()), axis=1
+        )
         pred_path.append(prediction_points)
 
     val_loss /= len(loader.dataset)

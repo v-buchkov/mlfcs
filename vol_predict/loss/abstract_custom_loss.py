@@ -16,8 +16,12 @@ class AbstractCustomLoss(nn.Module, ABC):
         super().__init__()
 
     @abstractmethod
-    def forward(self, true_returns: torch.Tensor, pred_vol: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+    def forward(
+        self, true_returns: torch.Tensor, pred_vol: torch.Tensor, *args, **kwargs
+    ) -> torch.Tensor:
         raise NotImplementedError
 
-    def __call__(self, true_returns: torch.Tensor, pred_vol: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+    def __call__(
+        self, true_returns: torch.Tensor, pred_vol: torch.Tensor, *args, **kwargs
+    ) -> torch.Tensor:
         return self.forward(true_returns, pred_vol, *args, **kwargs)

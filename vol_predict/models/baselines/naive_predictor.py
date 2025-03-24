@@ -5,8 +5,8 @@ import torch
 from vol_predict.models.abstract_predictor import AbstractPredictor
 
 
-class GARCHPredictor(AbstractPredictor):
-    def __init__(self):
+class NaivePredictor(AbstractPredictor):
+    def __init__(self, *args, **kwargs):
         super().__init__()
 
     def _forward(

@@ -7,12 +7,17 @@ import pandas as pd
 def simple_to_log_returns(simple_returns: pd.DataFrame) -> pd.DataFrame:
     return np.log(1 + simple_returns)
 
+
 def log_to_simple_returns(log_returns: pd.DataFrame) -> pd.DataFrame:
     return np.exp(log_returns) - 1
 
 
 class Returns:
-    def __init__(self, simple_returns: pd.DataFrame | None = None, log_returns: pd.DataFrame | None = None) -> None:
+    def __init__(
+        self,
+        simple_returns: pd.DataFrame | None = None,
+        log_returns: pd.DataFrame | None = None,
+    ) -> None:
         self.simple_returns = simple_returns
         self.log_returns = log_returns
 
@@ -28,4 +33,6 @@ class Returns:
         return self.simple_returns
 
     def truncate(self, n_periods: int) -> Returns:
-        return Returns(self.simple_returns.iloc[n_periods:], self.log_returns.iloc[n_periods:])
+        return Returns(
+            self.simple_returns.iloc[n_periods:], self.log_returns.iloc[n_periods:]
+        )

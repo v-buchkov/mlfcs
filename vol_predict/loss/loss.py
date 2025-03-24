@@ -10,6 +10,7 @@ class Loss(Enum):
     NLL = NormalNLL
     BAYESIAN_NLL = BayesianNLL
 
+
 class AvailableLosses(Enum):
     MSE = "mse"
     NLL = "nll"

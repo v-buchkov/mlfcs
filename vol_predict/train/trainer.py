@@ -45,7 +45,9 @@ class Trainer:
         train_preds, val_preds = [], []
         criterion = self.model_config.LOSS.to(self.experiment_config.DEVICE)
 
-        assert isinstance(criterion, AbstractCustomLoss), f"{criterion.__class__.__name__} is not a subclass of AbstractCustomLoss!"
+        assert isinstance(criterion, AbstractCustomLoss), (
+            f"{criterion.__class__.__name__} is not a subclass of AbstractCustomLoss!"
+        )
 
         for epoch in range(1, num_epochs + 1):
             if print_logs:
@@ -80,7 +82,9 @@ class Trainer:
 
     def run(self, model: AbstractPredictor, n_epochs: int | None = None) -> None:
         model = model.to(self.experiment_config.DEVICE)
-        optimizer = self.model_config.OPTIMIZER(model.parameters(), lr=self.model_config.LR)
+        optimizer = self.model_config.OPTIMIZER(
+            model.parameters(), lr=self.model_config.LR
+        )
 
         if n_epochs is None:
             n_epochs = self.model_config.TRAIN_EPOCHS
@@ -89,14 +93,16 @@ class Trainer:
             optimizer, T_max=n_epochs
         )
 
-        self._train_losses, self._val_losses, self._train_preds, self._val_preds = self._train(
-            model=model,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            train_loader=self._train_loader,
-            val_loader=self._val_loader,
-            num_epochs=n_epochs,
-            print_logs=True,
+        self._train_losses, self._val_losses, self._train_preds, self._val_preds = (
+            self._train(
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                train_loader=self._train_loader,
+                val_loader=self._val_loader,
+                num_epochs=n_epochs,
+                print_logs=True,
+            )
         )
 
         self.save(model, self.experiment_config.PATH_OUTPUT)

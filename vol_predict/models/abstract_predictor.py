@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 class AbstractPredictor(nn.Module, ABC):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
 
         self.hidden = None

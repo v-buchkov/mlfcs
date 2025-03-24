@@ -60,15 +60,11 @@ class Assessor:
         self.experiment_config = experiment_config
         self.model_config = model_config
 
-        self.ml_metrics = MlMetrics(
-            model_config.METRICS
-        )
+        self.ml_metrics = MlMetrics(model_config.METRICS)
 
     def run(self, model: AbstractPredictor) -> AssessmentResult:
         loss = self.model_config.LOSS.to(self.experiment_config.DEVICE)
-        model_loss, model_preds = validation_epoch(
-            model, loss, self.test_loader
-        )
+        model_loss, model_preds = validation_epoch(model, loss, self.test_loader)
 
         model_preds_tensor = torch.tensor(model_preds[:, 2])
         model_true_tensor = torch.tensor(model_preds[:, 1])
@@ -76,7 +72,9 @@ class Assessor:
         return AssessmentResult(
             mean_model_loss=model_loss.mean().item(),
             mean_val_loss=model_loss.mean().item(),
-            ml_metrics=self.ml_metrics(y_true=model_true_tensor, y_pred=model_preds_tensor),
+            ml_metrics=self.ml_metrics(
+                y_true=model_true_tensor, y_pred=model_preds_tensor
+            ),
         )
 
     def __call__(self, model: AbstractPredictor) -> AssessmentResult:
