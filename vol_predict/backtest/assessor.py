@@ -38,7 +38,7 @@ class AssessmentResult:
         for key, value in self.__dict__.items():
             if isinstance(value, dict):
                 for name, metric in value.items():
-                    val = f"{metric:.6f}" if isinstance(metric, float) else metric
+                    val = f"{metric:.12f}" if isinstance(metric, float) else metric
                     string += f"\n* {name} = {val}"
                 continue
             val = f"{value:.6f}" if isinstance(value, float) else value

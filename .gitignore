@@ -178,4 +178,5 @@ password.sh
 **/.idea
 **/**.pkl
 data/
-data/output/
+output/
+.gitignore
