@@ -28,6 +28,11 @@ class ExperimentConfig:
         },
     )
 
+    ASSET_UNIVERSE: tuple[str] = field(
+        default=("spx",),
+        metadata={"docs": "Tradeable assets tuple"},
+    )
+
     RANDOM_SEED: int = field(default=12, metadata={"docs": "Fix random seed"})
 
     TRAIN_START_DATE: pd.Timestamp = field(

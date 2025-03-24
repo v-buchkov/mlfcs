@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 
 from config.model_config import ModelConfig
 from vol_predict.train.trainer import Trainer
+from vol_predict.features.base_preprocessor import BasePreprocessor
 from vol_predict.dataset.returns_dataset import ReturnsDataset
 from vol_predict.backtest.assessor import Assessor, AssessmentResult
 from vol_predict.base.returns import Returns
@@ -29,10 +30,12 @@ class RunResult:
 class Runner:
     def __init__(
         self,
+        preprocessor: BasePreprocessor,
         model_config: ModelConfig,
         experiment_config: ExperimentConfig,
         verbose: bool = True,
     ) -> None:
+        self.preprocessor = preprocessor
         self.model_config = model_config
         self.experiment_config = experiment_config
         self.verbose = verbose
@@ -110,31 +113,34 @@ class Runner:
         train_set = ReturnsDataset(
             returns=self.train_returns,
             features=self.train_data,
+            preprocessor=self.preprocessor,
         )
         val_set = ReturnsDataset(
             returns=self.val_returns,
             features=self.val_data,
+            preprocessor=self.preprocessor,
         )
         test_set = ReturnsDataset(
             returns=self.test_returns,
             features=self.test_data,
+            preprocessor=self.preprocessor,
         )
 
         train_loader = DataLoader(
             train_set,
-            batch_size=self.model_config.BATCH_SIZE,
+            batch_size=self.model_config.batch_size,
             shuffle=False,
             drop_last=False,
         )
         val_loader = DataLoader(
             val_set,
-            batch_size=self.model_config.BATCH_SIZE,
+            batch_size=self.model_config.batch_size,
             shuffle=False,
             drop_last=False,
         )
         test_loader = DataLoader(
             test_set,
-            batch_size=self.model_config.BATCH_SIZE,
+            batch_size=self.model_config.batch_size,
             shuffle=False,
             drop_last=False,
         )

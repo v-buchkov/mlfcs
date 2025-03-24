@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 from vol_predict.features.base_preprocessor import BasePreprocessor
 
 
-class Preprocessor(BasePreprocessor):
+class OneToOnePreprocessor(BasePreprocessor):
     def __init__(
         self,
         feature_names: list[str] | None = None,

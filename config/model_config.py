@@ -1,5 +1,5 @@
 from typing import Type
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 import torch
 import torch.nn as nn
@@ -11,21 +11,24 @@ from vol_predict.loss.volatility_estimators import VolatilityMethod
 
 @dataclass
 class ModelConfig:
-    LR: float = 1e-3
-    HIDDEN_SIZE: int = 64
+    lr: float = 1e-3
+    hidden_size: int = 64
 
-    TRAIN_EPOCHS: int = 100
-    VAL_EPOCHS: int = 100
+    train_epochs: int = 100
+    val_epochs: int = 100
 
-    OPTIMIZER: Type[torch.optim.Optimizer] = torch.optim.SGD
+    optimizer: Type[torch.optim.Optimizer] = torch.optim.SGD
 
-    WEIGHT_DECAY: float = 0.0
+    weights_decay: float = 0.0
 
-    BATCH_SIZE: int = 64
+    batch_size: int = 64
 
-    LOSS: AbstractCustomLoss = Loss.MSE
+    loss: AbstractCustomLoss = Loss.MSE
 
     # TODO (V) handle metrics plotting
-    METRICS: tuple[nn.Module] = (torch.nn.MSELoss,)
+    metrics: tuple[nn.Module] = (torch.nn.MSELoss,)
 
-    VOL_CALC_METHOD: VolatilityMethod = VolatilityMethod("squared_returns")
+    vol_calc_method: VolatilityMethod = VolatilityMethod("squared_returns")
+
+    def dict(self):
+        return {k: str(v) for k, v in asdict(self).items()}

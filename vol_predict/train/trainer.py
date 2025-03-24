@@ -34,7 +34,7 @@ class Trainer:
     def _train(
         self,
         model: AbstractPredictor,
-        optimizer: torch.optim.Optimizer,
+        optimizer: torch.optim.optimizer,
         scheduler: Optional[Any],
         train_loader: DataLoader,
         val_loader: DataLoader,
@@ -43,7 +43,7 @@ class Trainer:
     ):
         train_losses, val_losses = [], []
         train_preds, val_preds = [], []
-        criterion = self.model_config.LOSS.to(self.experiment_config.DEVICE)
+        criterion = self.model_config.loss.to(self.experiment_config.DEVICE)
 
         assert isinstance(criterion, AbstractCustomLoss), (
             f"{criterion.__class__.__name__} is not a subclass of AbstractCustomLoss!"
@@ -82,12 +82,12 @@ class Trainer:
 
     def run(self, model: AbstractPredictor, n_epochs: int | None = None) -> None:
         model = model.to(self.experiment_config.DEVICE)
-        optimizer = self.model_config.OPTIMIZER(
-            model.parameters(), lr=self.model_config.LR
+        optimizer = self.model_config.optimizer(
+            model.parameters(), lr=self.model_config.lr
         )
 
         if n_epochs is None:
-            n_epochs = self.model_config.TRAIN_EPOCHS
+            n_epochs = self.model_config.train_epochs
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=n_epochs
