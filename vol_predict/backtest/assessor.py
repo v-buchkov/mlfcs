@@ -67,7 +67,13 @@ class Assessor:
 
     def run(self, model: AbstractPredictor) -> AssessmentResult:
         loss = self.model_config.loss.value().to(self.experiment_config.DEVICE)
-        model_loss, model_preds = validation_epoch(model, loss, self.test_loader)
+        model_loss, model_preds = validation_epoch(
+            model,
+            loss,
+            self.test_loader,
+            hidden_size=self.model_config.hidden_size,
+            n_layers=self.model_config.n_layers,
+        )
 
         model_preds_tensor = torch.tensor(model_preds[:, 1])
         model_true_tensor = torch.tensor(model_preds[:, 0])

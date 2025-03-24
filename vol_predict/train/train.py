@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler
 
 from vol_predict.loss.abstract_custom_loss import AbstractCustomLoss
+from vol_predict.models.dl.lstm_predictor import LSTMPredictor
 from vol_predict.models.abstract_predictor import AbstractPredictor
 
 
@@ -59,6 +60,9 @@ def train_epoch(
     criterion: AbstractCustomLoss,
     loader: DataLoader,
     tqdm_desc: str = "Model",
+    max_grad_norm: float = 1.0,
+    hidden_size: int = 128,
+    n_layers: int = 3,
 ) -> tuple[torch.float32, np.ndarray]:
     device = next(model.parameters()).device
 
@@ -75,6 +79,12 @@ def train_epoch(
     if has_cuda:
         scaler = GradScaler()
 
+    if isinstance(model, LSTMPredictor):
+        h_t = torch.zeros(n_layers, hidden_size, requires_grad=True)
+        c_t = torch.zeros(n_layers, hidden_size, requires_grad=True)
+
+        h_t, c_t = h_t.to(device), c_t.to(device)
+
     train_loss = 0.0
     pred_path = []
     model.train()
@@ -87,7 +97,15 @@ def train_epoch(
 
         if has_cuda:
             with torch.autocast(device_type="cuda", dtype=torch.float16):
-                pred_vol = model(features=features, past_returns=past_returns)
+                if isinstance(model, LSTMPredictor):
+                    pred_vol, (h_t, c_t) = model(
+                        features=features,
+                        past_returns=past_returns,
+                        hidden=h_t,
+                        memory=c_t,
+                    )
+                else:
+                    pred_vol = model(features=features, past_returns=past_returns)
 
                 loss = criterion(true_returns, pred_vol)
 
@@ -97,12 +115,22 @@ def train_epoch(
 
             scaler.update()
         else:
-            pred_vol = model(features=features, past_returns=past_returns)
+            if isinstance(model, LSTMPredictor):
+                pred_vol, (h_t, c_t) = model(
+                    features=features, past_returns=past_returns, hidden=h_t, memory=c_t
+                )
+                h_t = h_t.detach()
+                c_t = c_t.detach()
+            else:
+                pred_vol = model(features=features, past_returns=past_returns)
+
             loss = criterion(true_returns, pred_vol)
 
             if loss.requires_grad:
-                loss.backward()
+                loss.backward(retain_graph=True)
                 optimizer.step()
+
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
 
         train_loss += loss.item()
         prediction_points = np.concatenate(
@@ -120,7 +148,9 @@ def validation_epoch(
     model: AbstractPredictor,
     criterion: AbstractCustomLoss,
     loader: DataLoader,
-    tqdm_desc: [str, None] = None,
+    tqdm_desc: str | None = None,
+    hidden_size: int = 128,
+    n_layers: int = 3,
 ) -> tuple[torch.float32, np.ndarray]:
     device = next(model.parameters()).device
 
@@ -132,12 +162,24 @@ def validation_epoch(
     val_loss = 0.0
     model.eval()
     pred_path = []
+
+    if isinstance(model, LSTMPredictor):
+        h_t = torch.zeros(n_layers, hidden_size)
+        c_t = torch.zeros(n_layers, hidden_size)
+        h_t, c_t = h_t.to(device), c_t.to(device)
+
     for features, past_returns, true_returns in iterator:
         features = features.to(device)
         past_returns = past_returns.to(device)
         true_returns = true_returns.to(device)
 
-        pred_vol = model(features=features, past_returns=past_returns)
+        if isinstance(model, LSTMPredictor):
+            pred_vol, (h_t, c_t) = model(
+                features=features, past_returns=past_returns, hidden=h_t, memory=c_t
+            )
+        else:
+            pred_vol = model(features=features, past_returns=past_returns)
+
         loss = criterion(true_returns, pred_vol)
 
         val_loss += loss.item()

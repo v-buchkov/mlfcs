@@ -13,6 +13,7 @@ from vol_predict.loss.volatility_estimators import VolatilityMethod
 class ModelConfig:
     lr: float = 1e-3
     hidden_size: int = 64
+    n_layers: int = 2
 
     n_epochs: int = 100
     n_features: int = 24

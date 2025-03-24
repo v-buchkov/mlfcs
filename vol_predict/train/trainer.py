@@ -59,10 +59,21 @@ class Trainer:
                 desc_train, desc_val = None, None
 
             train_loss, train_pred = train_epoch(
-                model, optimizer, criterion, train_loader, tqdm_desc=desc_train
+                model,
+                optimizer,
+                criterion,
+                train_loader,
+                tqdm_desc=desc_train,
+                hidden_size=self.model_config.hidden_size,
+                n_layers=self.model_config.n_layers,
             )
             val_loss, val_pred = validation_epoch(
-                model, criterion, val_loader, tqdm_desc=desc_val
+                model,
+                criterion,
+                val_loader,
+                tqdm_desc=desc_val,
+                hidden_size=self.model_config.hidden_size,
+                n_layers=self.model_config.n_layers,
             )
 
             if scheduler is not None:

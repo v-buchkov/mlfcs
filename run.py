@@ -6,6 +6,8 @@ if TYPE_CHECKING:
     from typing import Type
     from vol_predict.runner import RunResult
 
+import torch
+
 from config.model_config import ModelConfig
 from config.experiment_config import ExperimentConfig
 from vol_predict.runner import Runner
@@ -32,7 +34,10 @@ def run_backtest(
     model_config: ModelConfig,
     baseline_config: ModelConfig,
     runner: Runner,
+    experiment_config: ExperimentConfig = ExperimentConfig(),
 ) -> RunResult:
+    torch.manual_seed(experiment_config.RANDOM_SEED)
+
     model = model_cls(**model_config.dict())
     baseline = baseline_cls(**baseline_config.dict())
 

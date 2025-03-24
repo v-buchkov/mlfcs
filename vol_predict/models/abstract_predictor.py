@@ -13,26 +13,30 @@ class AbstractPredictor(nn.Module, ABC):
         self.hidden = None
         self.memory = None
 
-        self._dummy_param = nn.Parameter(torch.empty(0))
-
     def forward(
         self,
         past_returns: torch.Tensor,
         features: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> torch.Tensor:
-        return self._forward(past_returns, features)
+        return self._forward(past_returns, features, *args, **kwargs)
 
     def __call__(
         self,
         past_returns: torch.Tensor,
         features: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> torch.Tensor:
-        return self.forward(past_returns, features)
+        return self.forward(past_returns, features, *args, **kwargs)
 
     @abstractmethod
     def _forward(
         self,
         past_returns: torch.Tensor,
         features: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> torch.Tensor:
         raise NotImplementedError
