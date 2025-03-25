@@ -1,0 +1,22 @@
+[project]
+name = "vol-predict"
+version = "0.1.0"
+description = ""
+requires-python = "==3.12.5"
+dependencies = [
+    "statsmodels>=0.14.4",
+    "scikit-learn>=1.5.2",
+    "numpy>=2.2.4",
+    "pandas>=2.2.3",
+    "matplotlib>=3.10.1",
+    "qpsolvers>=4.5.0"
+]
+
+[tool.uv]
+dev-dependencies = [
+    "ruff>=0.6.9",
+    "mypy>=1.11.2",
+    "pandas-stubs>=2.2.2.240909",
+    "scipy-stubs>=1.14.1.3",
+]
+

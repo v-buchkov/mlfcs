@@ -169,3 +169,14 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# My new ignores
+**/__pycache__/
+**/.DS_Store
+prod.env
+password.sh
+**/.idea
+**/**.pkl
+data/
+output/
+.gitignore
