@@ -24,6 +24,10 @@ class ModelConfig:
 
     batch_size: int = 64
 
+    # EWMA hyperparameters
+    ewma_look_back_win: int = 21
+    ewma_vola_calc_win: int = 21
+
     loss: AbstractCustomLoss = Loss.MSE
 
     # TODO (V) handle metrics plotting
