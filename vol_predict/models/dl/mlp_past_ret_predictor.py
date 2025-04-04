@@ -7,13 +7,13 @@ from vol_predict.models.dl.mlp import MLP
 from vol_predict.models.abstract_predictor import AbstractPredictor
 
 
-class MLPPredictor(AbstractPredictor):
+class MLPPastRetPredictor(AbstractPredictor):
     def __init__(
         self, hidden_size: int, n_features: int, n_layers: int = 2, *args, **kwargs
     ):
         super().__init__()
 
-        self.model = MLP([n_features] + ([hidden_size] * n_layers) + [1])
+        self.model = MLP([1 + n_features] + ([hidden_size] * n_layers) + [1])
 
     def _forward(
         self,
@@ -21,5 +21,6 @@ class MLPPredictor(AbstractPredictor):
         past_vols: torch.Tensor,
         features: torch.Tensor,
     ) -> torch.Tensor:
-        vol = self.model(features)
-        return nn.Softplus()(vol)
+        full_features = torch.cat([past_returns, features], dim=1)
+        std = self.model(full_features)
+        return nn.Softplus()(std)
