@@ -21,9 +21,13 @@ class ExperimentConfig:
         default=AvailableDatasets.BITCOIN, metadata={"docs": "Dataset to train on"}
     )
 
-    RETURN_COLUMN: str = field(default="ret", metadata={"docs": "Realized Return column"})
+    RETURN_COLUMN: str = field(
+        default="ret", metadata={"docs": "Realized Return column"}
+    )
 
-    VOL_COLUMN: str = field(default="vol", metadata={"docs": "Realized Variance column"})
+    VOL_COLUMN: str = field(
+        default="vol", metadata={"docs": "Realized Variance column"}
+    )
 
     RETRAIN_NUM_PERIODS: bool | None = field(
         default=None,

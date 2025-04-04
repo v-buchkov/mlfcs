@@ -8,7 +8,11 @@ class BayesianNLL(NormalNLL):
         super().__init__()
 
     def forward(
-        self, true_returns: torch.Tensor, true_vols: torch.Tensor, pred_vol: torch.Tensor, prior: torch.Tensor
+        self,
+        true_returns: torch.Tensor,
+        true_vols: torch.Tensor,
+        pred_vol: torch.Tensor,
+        prior: torch.Tensor,
     ) -> torch.Tensor:
         return (
             super().forward(true_returns, true_vols, pred_vol)

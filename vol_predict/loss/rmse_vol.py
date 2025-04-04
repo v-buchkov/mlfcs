@@ -8,6 +8,11 @@ class RMSEVolLoss(MSEVolLoss):
         super().__init__()
 
     def forward(
-        self, true_returns: torch.Tensor, true_vols: torch.Tensor, pred_vol: torch.Tensor, *args, **kwargs
+        self,
+        true_returns: torch.Tensor,
+        true_vols: torch.Tensor,
+        pred_vol: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> torch.Tensor:
         return super().forward(true_returns, true_vols, pred_vol).sqrt()

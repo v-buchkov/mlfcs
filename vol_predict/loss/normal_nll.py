@@ -8,6 +8,11 @@ class NormalNLL(AbstractCustomLoss):
         super().__init__()
 
     def forward(
-        self, true_returns: torch.Tensor, true_vols: torch.Tensor, pred_vol: torch.Tensor, *args, **kwargs
+        self,
+        true_returns: torch.Tensor,
+        true_vols: torch.Tensor,
+        pred_vol: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> torch.Tensor:
-        return (torch.log(pred_vol) + true_returns ** 2 / pred_vol).sum()
+        return (torch.log(pred_vol) + true_returns**2 / pred_vol).sum()

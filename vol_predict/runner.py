@@ -93,17 +93,25 @@ class Runner:
             self.test_data.loc[:, self.experiment_config.RETURN_COLUMN].iloc[1:]
         )
 
-        self.train_vols = self.train_data.loc[:, self.experiment_config.VOL_COLUMN].iloc[1:]
+        self.train_vols = self.train_data.loc[
+            :, self.experiment_config.VOL_COLUMN
+        ].iloc[1:]
         self.val_vols = self.val_data.loc[:, self.experiment_config.VOL_COLUMN].iloc[1:]
-        self.test_vols = self.test_data.loc[:, self.experiment_config.VOL_COLUMN].iloc[1:]
+        self.test_vols = self.test_data.loc[:, self.experiment_config.VOL_COLUMN].iloc[
+            1:
+        ]
 
-        feature_columns = data_df.columns.difference([self.experiment_config.RETURN_COLUMN, self.experiment_config.VOL_COLUMN]).tolist()
+        feature_columns = data_df.columns.difference(
+            [self.experiment_config.RETURN_COLUMN, self.experiment_config.VOL_COLUMN]
+        ).tolist()
         self.train_data = self.train_data[feature_columns].shift(1).iloc[1:]
         self.val_data = self.val_data[feature_columns].shift(1).iloc[1:]
         self.test_data = self.test_data[feature_columns].shift(1).iloc[1:]
 
         train_data = self._scaler.fit_transform(self.train_data)
-        self.train_data = pd.DataFrame(train_data, index=self.train_data.index, columns=self.train_data.columns)
+        self.train_data = pd.DataFrame(
+            train_data, index=self.train_data.index, columns=self.train_data.columns
+        )
 
         val_data = self._scaler.transform(self.val_data)
         self.val_data = pd.DataFrame(
@@ -116,7 +124,9 @@ class Runner:
         )
 
         self.model_config.n_features = len(feature_columns)
-        unique_columns = ["_".join(column.split("_")[:-1]) for column in feature_columns]
+        unique_columns = [
+            "_".join(column.split("_")[:-1]) for column in feature_columns
+        ]
         self.model_config.n_unique_features = np.unique(unique_columns).shape[0]
 
         self.train_loader, self.val_loader, self.test_loader = self._get_dataloaders()

@@ -8,7 +8,13 @@ from vol_predict.models.abstract_predictor import AbstractPredictor
 
 class LSTMPredictor(AbstractPredictor):
     def __init__(
-        self, hidden_size: int, n_features: int, n_unique_features: int, n_layers: int, *args, **kwargs
+        self,
+        hidden_size: int,
+        n_features: int,
+        n_unique_features: int,
+        n_layers: int,
+        *args,
+        **kwargs,
     ):
         super().__init__()
 
@@ -83,7 +89,10 @@ class LSTMPredictor(AbstractPredictor):
         # out = out.reshape(features.shape[0], -1)
         # out = self.final_layer(torch.cat([out, past_returns, past_vols], dim=1))
 
-        out = torch.cat([h_t.reshape(features.shape[0], -1), c_t.reshape(features.shape[0], -1)], dim=1)
+        out = torch.cat(
+            [h_t.reshape(features.shape[0], -1), c_t.reshape(features.shape[0], -1)],
+            dim=1,
+        )
         # print(out.shape)
         out = self.final_layer(torch.cat([out, past_returns, past_vols], dim=1))
 

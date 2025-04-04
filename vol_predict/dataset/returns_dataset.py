@@ -26,7 +26,9 @@ class ReturnsDataset(Dataset):
     def __len__(self):
         return len(self.returns)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(
+        self, idx: int
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         features = self.features.iloc[idx]
         past_returns = self.past_returns.iloc[idx]
         past_vols = self.past_vols.iloc[idx]
