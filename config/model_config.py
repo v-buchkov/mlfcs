@@ -3,6 +3,8 @@ from dataclasses import dataclass, asdict
 
 import torch
 import torch.nn as nn
+from sklearn.base import BaseEstimator
+from sklearn.preprocessing import MinMaxScaler
 
 from vol_predict.loss.abstract_custom_loss import AbstractCustomLoss
 from vol_predict.loss.loss import Loss
@@ -16,7 +18,8 @@ class ModelConfig:
     n_layers: int = 2
 
     n_epochs: int = 100
-    n_features: int = 24
+    n_features: int | None = None
+    n_unique_features: int = 10
 
     optimizer: Type[torch.optim.Optimizer] = torch.optim.SGD
 
@@ -26,8 +29,10 @@ class ModelConfig:
 
     loss: AbstractCustomLoss = Loss.MSE
 
+    scaler: Type[BaseEstimator] = MinMaxScaler()
+
     # TODO (V) handle metrics plotting
-    metrics: tuple[nn.Module] = (torch.nn.MSELoss,)
+    metrics: tuple[nn.Module] = (Loss.RMSE,)
 
     vol_calc_method: VolatilityMethod = VolatilityMethod("squared_returns")
 

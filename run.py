@@ -31,15 +31,13 @@ def initialize_runner(
 def run_backtest(
     model_cls: Type[AbstractPredictor],
     baseline_cls: Type[AbstractPredictor],
-    model_config: ModelConfig,
-    baseline_config: ModelConfig,
     runner: Runner,
     experiment_config: ExperimentConfig = ExperimentConfig(),
 ) -> RunResult:
     torch.manual_seed(experiment_config.RANDOM_SEED)
 
-    model = model_cls(**model_config.dict())
-    baseline = baseline_cls(**baseline_config.dict())
+    model = model_cls(**runner.model_config.dict())
+    baseline = baseline_cls(**runner.model_config.dict())
 
     run_result = runner(model=model, baseline=baseline)
 
@@ -57,8 +55,7 @@ if __name__ == "__main__":
     print(AvailableDatasets)
 
     config = ExperimentConfig()
-    config.DATASET = AvailableDatasets.SPX
-    config.ASSET_UNIVERSE = ("spx",)
+    config.DATASET = AvailableDatasets.BITCOIN
 
     model_params = ModelConfig()
     baseline_params = ModelConfig()
@@ -75,8 +72,6 @@ if __name__ == "__main__":
     result = run_backtest(
         model_cls=Model,
         baseline_cls=Baseline,
-        model_config=model_params,
-        baseline_config=baseline_params,
         runner=model_runner,
     )
 

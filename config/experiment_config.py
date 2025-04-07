@@ -10,7 +10,7 @@ import torch
 
 class AvailableDatasets(Enum):
     GBM = Path("gbm") / "gbm.csv"
-    BITCOIN = ""
+    BITCOIN = Path("btc") / "data_df.csv"
     SPX = Path("spx") / "data_df.csv"
 
 
@@ -18,7 +18,15 @@ class AvailableDatasets(Enum):
 class ExperimentConfig:
     # Training Settings
     DATASET: AvailableDatasets = field(
-        default=AvailableDatasets.GBM, metadata={"docs": "Dataset to train on"}
+        default=AvailableDatasets.BITCOIN, metadata={"docs": "Dataset to train on"}
+    )
+
+    RETURN_COLUMN: str = field(
+        default="ret", metadata={"docs": "Realized Return column"}
+    )
+
+    VOL_COLUMN: str = field(
+        default="vol", metadata={"docs": "Realized Variance column"}
     )
 
     RETRAIN_NUM_PERIODS: bool | None = field(
@@ -28,27 +36,22 @@ class ExperimentConfig:
         },
     )
 
-    ASSET_UNIVERSE: tuple[str] = field(
-        default=("spx",),
-        metadata={"docs": "Tradeable assets tuple"},
-    )
-
     N_FEATURES: int = field(default=12, metadata={"docs": "Fix random seed"})
 
     RANDOM_SEED: int = field(default=12, metadata={"docs": "Fix random seed"})
 
     TRAIN_START_DATE: pd.Timestamp = field(
-        default=pd.to_datetime("2004-01-01"),
+        default=pd.Timestamp("2018-06-04"),
         metadata={"docs": "Date to start training"},
     )
 
     VAL_START_DATE: pd.Timestamp = field(
-        default=pd.to_datetime("2021-01-01"),
+        default=pd.Timestamp("2018-09-01"),
         metadata={"docs": "Date to end train"},
     )
 
     TEST_START_DATE: pd.Timestamp = field(
-        default=pd.to_datetime("2022-01-01"),
+        default=pd.Timestamp("2018-09-15"),
         metadata={"docs": "Date to end analysis"},
     )
 
