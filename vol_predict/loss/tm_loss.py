@@ -8,14 +8,15 @@ import math
 from vol_predict.loss.abstract_custom_loss import AbstractCustomLoss
 
 class MixtureNormalNLL(AbstractCustomLoss):
-    def __init__(self, eps: float = 1e-12):
-        super().__init__()
+    def __init__(self, eps: float = 1e-12,l2_coef: float = 0.0):
+        super().__init__(l2_coef=l2_coef)
         self.eps = eps
 
     def forward(
         self, 
-        true_returns: torch.Tensor,            # shape [B]
-        pred_vol: dict                         # dict returned from model.forward()
+        true_returns: torch.Tensor,          
+        pred_vol: dict, 
+        model: nn.Module                        
     ) -> torch.Tensor:
         """
         Args:
@@ -57,17 +58,17 @@ class MixtureNormalNLL(AbstractCustomLoss):
             ], dim=1),
             dim=1
         )
-
-        return -log_mix_pdf.mean()
+        l2_penalty = self.compute_l2(model)
+        return -log_mix_pdf.mean() + l2_penalty
 
 class HingeNormalMixtureNLL(MixtureNormalNLL):
-    def __init__(self, penalty_coef: float = 1.0, delta: float = 0.0, eps: float = 1e-12):
-        super().__init__(eps=eps)
+    def __init__(self, penalty_coef: float = 1.0, delta: float = 0.0, eps: float = 1e-12,l2_coef: float = 0.0):
+        super().__init__(eps=eps,l2_coef=l2_coef)
         self.penalty_coef = penalty_coef
         self.delta = delta
 
     def forward(
-        self, true_returns: torch.Tensor, pred_vol: dict
+        self, true_returns: torch.Tensor, pred_vol: dict, model: nn.Module
     ) -> torch.Tensor:
         base_loss = super().forward(true_returns, pred_vol)
 
@@ -84,12 +85,12 @@ class HingeNormalMixtureNLL(MixtureNormalNLL):
 
 
 class MixtureLogNormalNLL(AbstractCustomLoss):
-    def __init__(self, eps: float = 1e-12):
-        super().__init__()
+    def __init__(self, eps: float = 1e-12,l2_coef: float = 0.0):
+        super().__init__(l2_coef=l2_coef)
         self.eps = eps
 
     def forward(
-        self, true_returns: torch.Tensor, pred_vol: dict
+        self, true_returns: torch.Tensor, pred_vol: dict, model: nn.Module
     ) -> torch.Tensor:
         """
         Assumes pred_vol contains:
@@ -130,16 +131,17 @@ class MixtureLogNormalNLL(AbstractCustomLoss):
 
         log_mix = torch.logsumexp(torch.stack([comp0, comp1], dim=1), dim=1)
         nll = -log_mix.mean()
-        return nll
+        l2_penalty = self.compute_l2(model)
+        return nll + l2_penalty
 
 
 class MixtureInverseGaussianNLL(AbstractCustomLoss):
-    def __init__(self, eps: float = 1e-12):
-        super().__init__()
+    def __init__(self, eps: float = 1e-12,l2_coef: float = 0.0):
+        super().__init__(l2_coef=l2_coef)
         self.eps = eps
 
     def forward(
-        self, true_returns: torch.Tensor, pred_vol: dict
+        self, true_returns: torch.Tensor, pred_vol: dict, model: nn.Module
     ) -> torch.Tensor:
         """
         Assumes pred_vol contains:
@@ -175,17 +177,18 @@ class MixtureInverseGaussianNLL(AbstractCustomLoss):
 
         log_mix = torch.logsumexp(torch.stack([comp0, comp1], dim=1), dim=1)
         nll = -log_mix.mean()
-        return nll
+        l2_penalty = self.compute_l2(model)
+        return nll + l2_penalty
 
 
 
 class MixtureWeibullNLL(AbstractCustomLoss):
-    def __init__(self, eps: float = 1e-12):
-        super().__init__()
+    def __init__(self, eps: float = 1e-12,l2_coef: float = 0.0):
+        super().__init__(l2_coef=l2_coef)
         self.eps = eps
 
     def forward(
-        self, true_returns: torch.Tensor, pred_vol: dict
+        self, true_returns: torch.Tensor, pred_vol: dict, model: nn.Module
     ) -> torch.Tensor:
         """
         Assumes pred_vol contains:
