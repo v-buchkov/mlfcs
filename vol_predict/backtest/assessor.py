@@ -90,8 +90,8 @@ class Assessor:
         return AssessmentResult(
             mean_model_loss=model_loss,
             mean_val_loss=model_loss,
-            mean_pred_vol=torch.sqrt(model_preds_tensor.mean() * 8 * 252),
-            mean_true_vol=torch.sqrt(true_vols.mean() * 8 * 252),
+            mean_pred_vol=torch.sqrt(model_preds_tensor.mean()),
+            mean_true_vol=torch.sqrt(true_vols.mean()),
             ml_metrics=self.ml_metrics(true_returns, true_vols, model_preds_tensor),
         )
 
