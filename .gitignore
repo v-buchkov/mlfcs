@@ -180,3 +180,4 @@ password.sh
 data/
 output/
 .gitignore
+data:/data_df.csv
