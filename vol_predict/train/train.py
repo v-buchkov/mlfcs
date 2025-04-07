@@ -80,20 +80,20 @@ def train_epoch(
         scaler = GradScaler()
 
     if isinstance(model, LSTMPredictor):
-        h_t = torch.zeros(n_layers, hidden_size, requires_grad=True)
-        c_t = torch.zeros(n_layers, hidden_size, requires_grad=True)
-
-        h_t, c_t = h_t.to(device), c_t.to(device)
+        h_t = None
+        c_t = None
 
     train_loss = 0.0
     pred_path = []
     model.train()
-    for features, past_returns, true_returns in iterator:
+    for features, past_returns, past_vols, true_returns, true_vols in iterator:
         optimizer.zero_grad()
 
         features = features.to(device)
         past_returns = past_returns.to(device)
+        past_vols = past_vols.to(device)
         true_returns = true_returns.to(device)
+        true_vols = true_vols.to(device)
 
         if has_cuda:
             with torch.autocast(device_type="cuda", dtype=torch.float16):
@@ -101,13 +101,18 @@ def train_epoch(
                     pred_vol, (h_t, c_t) = model(
                         features=features,
                         past_returns=past_returns,
-                        hidden=h_t,
-                        memory=c_t,
+                        past_vols=past_vols,
+                        hidden=None,
+                        memory=None,
                     )
                 else:
-                    pred_vol = model(features=features, past_returns=past_returns)
+                    pred_vol = model(
+                        features=features,
+                        past_returns=past_returns,
+                        past_vols=past_vols,
+                    )
 
-                loss = criterion(true_returns, pred_vol)
+                loss = criterion(true_returns, true_vols, pred_vol)
 
             if loss.requires_grad:
                 scaler.scale(loss).backward()
@@ -117,14 +122,20 @@ def train_epoch(
         else:
             if isinstance(model, LSTMPredictor):
                 pred_vol, (h_t, c_t) = model(
-                    features=features, past_returns=past_returns, hidden=h_t, memory=c_t
+                    features=features,
+                    past_returns=past_returns,
+                    past_vols=past_vols,
+                    hidden=None,
+                    memory=None,
                 )
                 h_t = h_t.detach()
                 c_t = c_t.detach()
             else:
-                pred_vol = model(features=features, past_returns=past_returns)
+                pred_vol = model(
+                    features=features, past_returns=past_returns, past_vols=past_vols
+                )
 
-            loss = criterion(true_returns, pred_vol)
+            loss = criterion(true_returns, true_vols, pred_vol)
 
             if loss.requires_grad:
                 loss.backward(retain_graph=True)
@@ -134,7 +145,12 @@ def train_epoch(
 
         train_loss += loss.item()
         prediction_points = np.concatenate(
-            (true_returns.cpu().numpy(), pred_vol.detach().cpu().numpy()), axis=1
+            (
+                true_returns.cpu().numpy(),
+                true_vols.cpu().numpy(),
+                pred_vol.detach().cpu().numpy(),
+            ),
+            axis=1,
         )
         pred_path.append(prediction_points)
 
@@ -164,28 +180,40 @@ def validation_epoch(
     pred_path = []
 
     if isinstance(model, LSTMPredictor):
-        h_t = torch.zeros(n_layers, hidden_size)
-        c_t = torch.zeros(n_layers, hidden_size)
-        h_t, c_t = h_t.to(device), c_t.to(device)
+        h_t = None
+        c_t = None
 
-    for features, past_returns, true_returns in iterator:
+    for features, past_returns, past_vols, true_returns, true_vols in iterator:
         features = features.to(device)
         past_returns = past_returns.to(device)
+        past_vols = past_vols.to(device)
         true_returns = true_returns.to(device)
+        true_vols = true_vols.to(device)
 
         if isinstance(model, LSTMPredictor):
             pred_vol, (h_t, c_t) = model(
-                features=features, past_returns=past_returns, hidden=h_t, memory=c_t
+                features=features,
+                past_returns=past_returns,
+                past_vols=past_vols,
+                hidden=None,
+                memory=None,
             )
         else:
-            pred_vol = model(features=features, past_returns=past_returns)
+            pred_vol = model(
+                features=features, past_returns=past_returns, past_vols=past_vols
+            )
 
-        loss = criterion(true_returns, pred_vol)
+        loss = criterion(true_returns, true_vols, pred_vol)
 
         val_loss += loss.item()
 
         prediction_points = np.concatenate(
-            (true_returns.cpu().numpy(), pred_vol.detach().cpu().numpy()), axis=1
+            (
+                true_returns.cpu().numpy(),
+                true_vols.cpu().numpy(),
+                pred_vol.detach().cpu().numpy(),
+            ),
+            axis=1,
         )
         pred_path.append(prediction_points)
 

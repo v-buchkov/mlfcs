@@ -1,9 +1,9 @@
 import torch
 
-from vol_predict.loss.abstract_custom_loss import AbstractCustomLoss
+from vol_predict.loss.mse_vol import MSEVolLoss
 
 
-class NormalNLL(AbstractCustomLoss):
+class RMSEVolLoss(MSEVolLoss):
     def __init__(self):
         super().__init__()
 
@@ -15,4 +15,4 @@ class NormalNLL(AbstractCustomLoss):
         *args,
         **kwargs,
     ) -> torch.Tensor:
-        return (torch.log(pred_vol) + true_returns**2 / pred_vol).sum()
+        return super().forward(true_returns, true_vols, pred_vol).sqrt()

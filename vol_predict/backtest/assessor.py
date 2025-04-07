@@ -17,12 +17,17 @@ class MlMetrics:
     def __init__(self, ml_metrics: tuple[nn.Module]):
         self._ml_metrics = ml_metrics
 
-    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> dict[str, float]:
+    def __call__(
+        self,
+        true_returns: torch.Tensor,
+        true_vols: torch.Tensor,
+        pred_vol: torch.Tensor,
+    ) -> dict[str, float]:
         metrics = {}
         for metric in self._ml_metrics:
-            metric_instance = metric()
+            metric_instance = metric.value()
             metrics[metric_instance.__class__.__name__] = metric_instance(
-                y_true, y_pred
+                true_returns, true_vols, pred_vol
             ).item()
 
         return metrics
@@ -32,6 +37,9 @@ class MlMetrics:
 class AssessmentResult:
     mean_model_loss: float
     mean_val_loss: float
+
+    mean_pred_vol: float
+    mean_true_vol: float
 
     ml_metrics: dict[str, float]
 
@@ -75,15 +83,16 @@ class Assessor:
             n_layers=self.model_config.n_layers,
         )
 
-        model_preds_tensor = torch.tensor(model_preds[:, 1])
-        model_true_tensor = torch.tensor(model_preds[:, 0])
+        true_returns = torch.tensor(model_preds[:, 0])
+        true_vols = torch.tensor(model_preds[:, 1])
+        model_preds_tensor = torch.tensor(model_preds[:, 2])
 
         return AssessmentResult(
             mean_model_loss=model_loss,
             mean_val_loss=model_loss,
-            ml_metrics=self.ml_metrics(
-                y_true=model_true_tensor, y_pred=model_preds_tensor
-            ),
+            mean_pred_vol=torch.sqrt(model_preds_tensor.mean()),
+            mean_true_vol=torch.sqrt(true_vols.mean()),
+            ml_metrics=self.ml_metrics(true_returns, true_vols, model_preds_tensor),
         )
 
     def __call__(self, model: AbstractPredictor) -> AssessmentResult:

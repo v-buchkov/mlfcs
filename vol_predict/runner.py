@@ -40,6 +40,8 @@ class Runner:
         self.experiment_config = experiment_config
         self.verbose = verbose
 
+        self._scaler = self.model_config.scaler
+
         self._initialize()
 
         self._model_trainer = Trainer(
@@ -64,8 +66,11 @@ class Runner:
         data_df = pd.read_csv(
             self.experiment_config.PATH_DATA / self.experiment_config.DATASET.value
         )
-        data_df["date"] = pd.to_datetime(data_df["date"])
-        return data_df.set_index("date")
+        data_df["datetime"] = pd.to_datetime(data_df["datetime"])
+        data_df = data_df.sort_values(by="datetime")
+        data_df = data_df.set_index("datetime")
+        data_df.index = data_df.index.tz_localize(None)
+        return data_df
 
     def _initialize(self):
         data_df = self._load_df()
@@ -78,24 +83,51 @@ class Runner:
         ]
         self.test_data = data_df.loc[self.experiment_config.TEST_START_DATE :]
 
-        if self.experiment_config.ASSET_UNIVERSE is None:
-            self.experiment_config.ASSET_UNIVERSE = tuple(
-                set(self.train_data.columns.tolist())
-            )
-
         self.train_returns = Returns(
-            self.train_data.loc[:, self.experiment_config.ASSET_UNIVERSE].iloc[1:]
+            self.train_data.loc[:, self.experiment_config.RETURN_COLUMN].iloc[1:]
         )
         self.val_returns = Returns(
-            self.val_data.loc[:, self.experiment_config.ASSET_UNIVERSE].iloc[1:]
+            self.val_data.loc[:, self.experiment_config.RETURN_COLUMN].iloc[1:]
         )
         self.test_returns = Returns(
-            self.test_data.loc[:, self.experiment_config.ASSET_UNIVERSE].iloc[1:]
+            self.test_data.loc[:, self.experiment_config.RETURN_COLUMN].iloc[1:]
         )
 
-        self.train_data = self.train_data.shift(1).iloc[1:]
-        self.val_data = self.val_data.shift(1).iloc[1:]
-        self.test_data = self.test_data.shift(1).iloc[1:]
+        self.train_vols = self.train_data.loc[
+            :, self.experiment_config.VOL_COLUMN
+        ].iloc[1:]
+        self.val_vols = self.val_data.loc[:, self.experiment_config.VOL_COLUMN].iloc[1:]
+        self.test_vols = self.test_data.loc[:, self.experiment_config.VOL_COLUMN].iloc[
+            1:
+        ]
+
+        feature_columns = data_df.columns.difference(
+            [self.experiment_config.RETURN_COLUMN, self.experiment_config.VOL_COLUMN]
+        ).tolist()
+        self.train_data = self.train_data[feature_columns].shift(1).iloc[1:]
+        self.val_data = self.val_data[feature_columns].shift(1).iloc[1:]
+        self.test_data = self.test_data[feature_columns].shift(1).iloc[1:]
+
+        train_data = self._scaler.fit_transform(self.train_data)
+        self.train_data = pd.DataFrame(
+            train_data, index=self.train_data.index, columns=self.train_data.columns
+        )
+
+        val_data = self._scaler.transform(self.val_data)
+        self.val_data = pd.DataFrame(
+            val_data, index=self.val_data.index, columns=self.val_data.columns
+        )
+
+        test_data = self._scaler.transform(self.test_data)
+        self.test_data = pd.DataFrame(
+            test_data, index=self.test_data.index, columns=self.test_data.columns
+        )
+
+        self.model_config.n_features = len(feature_columns)
+        unique_columns = [
+            "_".join(column.split("_")[:-1]) for column in feature_columns
+        ]
+        self.model_config.n_unique_features = np.unique(unique_columns).shape[0]
 
         self.train_loader, self.val_loader, self.test_loader = self._get_dataloaders()
 
@@ -113,16 +145,19 @@ class Runner:
     def _get_dataloaders(self) -> tuple[DataLoader, DataLoader, DataLoader]:
         train_set = ReturnsDataset(
             returns=self.train_returns,
+            vols=self.train_vols,
             features=self.train_data,
             preprocessor=self.preprocessor,
         )
         val_set = ReturnsDataset(
             returns=self.val_returns,
+            vols=self.val_vols,
             features=self.val_data,
             preprocessor=self.preprocessor,
         )
         test_set = ReturnsDataset(
             returns=self.test_returns,
+            vols=self.test_vols,
             features=self.test_data,
             preprocessor=self.preprocessor,
         )
