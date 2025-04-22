@@ -6,7 +6,7 @@ import torch.nn as nn
 from vol_predict.models.abstract_predictor import AbstractPredictor
 
 
-class LSTMPredictor(AbstractPredictor):
+class LSTMSquarePredictor(AbstractPredictor):
     def __init__(
         self,
         hidden_size: int,
@@ -51,10 +51,12 @@ class LSTMPredictor(AbstractPredictor):
         past_returns: torch.Tensor,
         past_vols: torch.Tensor,
         features: torch.Tensor,
-        hidden: torch.Tensor | None = None,
-        memory: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        *args,
+        **kwargs,
+    ) -> torch.Tensor:
         model_device = past_returns.device
+
+        features = features[:, 12:]
 
         sequence_length = features.shape[1] // self.n_unique_features
 
@@ -63,27 +65,21 @@ class LSTMPredictor(AbstractPredictor):
             features.shape[0], sequence_length, self.n_unique_features
         )
 
-        if hidden is None:
-            h_t = torch.zeros(
-                self.n_layers,
-                features.shape[0],
-                self.hidden_size,
-                dtype=torch.float32,
-                requires_grad=True,
-            ).to(model_device)
-        else:
-            h_t = hidden
+        h_t = torch.zeros(
+            self.n_layers,
+            features.shape[0],
+            self.hidden_size,
+            dtype=torch.float32,
+            requires_grad=True,
+        ).to(model_device)
 
-        if memory is None:
-            c_t = torch.zeros(
-                self.n_layers,
-                features.shape[0],
-                self.hidden_size,
-                dtype=torch.float32,
-                requires_grad=True,
-            ).to(model_device)
-        else:
-            c_t = memory
+        c_t = torch.zeros(
+            self.n_layers,
+            features.shape[0],
+            self.hidden_size,
+            dtype=torch.float32,
+            requires_grad=True,
+        ).to(model_device)
 
         out, (h_t, c_t) = self.model(features, (h_t, c_t))
         # out = out.reshape(features.shape[0], -1)
@@ -96,4 +92,4 @@ class LSTMPredictor(AbstractPredictor):
         # print(out.shape)
         out = self.final_layer(torch.cat([out, past_returns, past_vols], dim=1))
 
-        return nn.Softplus()(out), (h_t, c_t)
+        return out ** 2

@@ -123,11 +123,14 @@ class Runner:
             test_data, index=self.test_data.index, columns=self.test_data.columns
         )
 
-        self.model_config.n_features = len(feature_columns)
-        unique_columns = [
-            "_".join(column.split("_")[:-1]) for column in feature_columns
-        ]
-        self.model_config.n_unique_features = np.unique(unique_columns).shape[0]
+        if self.model_config.n_features is None:
+            self.model_config.n_features = len(feature_columns)
+
+        if self.model_config.n_unique_features is None:
+            unique_columns = [
+                "_".join(column.split("_")[:-1]) for column in feature_columns
+            ]
+            self.model_config.n_unique_features = np.unique(unique_columns).shape[0]
 
         self.train_loader, self.val_loader, self.test_loader = self._get_dataloaders()
 

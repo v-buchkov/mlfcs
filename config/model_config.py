@@ -19,7 +19,7 @@ class ModelConfig:
 
     n_epochs: int = 100
     n_features: int | None = None
-    n_unique_features: int = 10
+    n_unique_features: int | None = None
 
     optimizer: Type[torch.optim.Optimizer] = torch.optim.SGD
 
