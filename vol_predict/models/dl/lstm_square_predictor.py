@@ -92,4 +92,4 @@ class LSTMSquarePredictor(AbstractPredictor):
         # print(out.shape)
         out = self.final_layer(torch.cat([out, past_returns, past_vols], dim=1))
 
-        return out ** 2
+        return torch.pow(out, 2)

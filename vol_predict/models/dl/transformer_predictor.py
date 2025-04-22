@@ -6,7 +6,7 @@ import torch.nn as nn
 from vol_predict.models.abstract_predictor import AbstractPredictor
 
 
-class LSTMSoftplusPredictor(AbstractPredictor):
+class TransformerPredictor(AbstractPredictor):
     def __init__(
         self,
         hidden_size: int,
@@ -34,7 +34,8 @@ class LSTMSoftplusPredictor(AbstractPredictor):
         )
 
         self.final_layer = nn.Sequential(
-            nn.Linear(hidden_size + 2, hidden_size),
+            # nn.Linear(hidden_size * n_features // n_unique_features + 2, hidden_size),
+            nn.Linear(hidden_size * n_layers * 2 + 2, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
         )
@@ -81,13 +82,13 @@ class LSTMSoftplusPredictor(AbstractPredictor):
         ).to(model_device)
 
         out, (h_t, c_t) = self.model(features, (h_t, c_t))
-        out = out[:, -1, :]
-        out = out.reshape(features.shape[0], -1)
+        # out = out.reshape(features.shape[0], -1)
+        # out = self.final_layer(torch.cat([out, past_returns, past_vols], dim=1))
 
-        # out = torch.cat(
-        #     [h_t.reshape(features.shape[0], -1), c_t.reshape(features.shape[0], -1)],
-        #     dim=1,
-        # )
+        out = torch.cat(
+            [h_t.reshape(features.shape[0], -1), c_t.reshape(features.shape[0], -1)],
+            dim=1,
+        )
         # print(out.shape)
         out = self.final_layer(torch.cat([out, past_returns, past_vols], dim=1))
 

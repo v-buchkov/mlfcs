@@ -201,6 +201,8 @@ class Runner:
         self, model: AbstractPredictor, baseline: AbstractPredictor
     ) -> RunResult:
         model_assessment = self._assessor(model)
+        self._assessor.save()
+
         baseline_assessment = self._assessor(baseline)
 
         return RunResult(

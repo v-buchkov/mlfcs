@@ -6,13 +6,14 @@ import torch.nn as nn
 from vol_predict.models.abstract_predictor import AbstractPredictor
 
 
-class LSTMSoftplusPredictor(AbstractPredictor):
+class LSTMSoftplusDropoutPredictor(AbstractPredictor):
     def __init__(
         self,
         hidden_size: int,
         n_features: int,
         n_unique_features: int,
         n_layers: int,
+        dropout: float,
         *args,
         **kwargs,
     ):
@@ -34,8 +35,10 @@ class LSTMSoftplusPredictor(AbstractPredictor):
         )
 
         self.final_layer = nn.Sequential(
+            # nn.Linear(hidden_size * n_features // n_unique_features + 2, hidden_size),
             nn.Linear(hidden_size + 2, hidden_size),
             nn.ReLU(),
+            nn.Dropout(dropout),
             nn.Linear(hidden_size, 1),
         )
 

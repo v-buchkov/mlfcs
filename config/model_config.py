@@ -1,6 +1,8 @@
 from typing import Type
 from dataclasses import dataclass, asdict
 
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from sklearn.base import BaseEstimator
@@ -16,6 +18,7 @@ class ModelConfig:
     lr: float = 1e-3
     hidden_size: int = 64
     n_layers: int = 2
+    dropout: float = 0.2
 
     n_epochs: int = 100
     n_features: int | None = None
