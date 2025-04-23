@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from vol_predict.models.abstract_predictor import AbstractPredictor
 
+
 def positional_encoding(x: torch.Tensor, device: str, n_levels: int) -> torch.Tensor:
     pos = torch.arange(0, n_levels, 1, dtype=torch.float32) / (n_levels - 1)
     pos = (pos + pos) - 1
@@ -45,7 +46,8 @@ class TransformerPredictor(AbstractPredictor):
         torch.manual_seed(12)
 
         self.encoder_layer = nn.TransformerEncoderLayer(
-            d_model=n_unique_features + 1, # +1, as have additional feature = position encoding
+            d_model=n_unique_features
+            + 1,  # +1, as have additional feature = position encoding
             nhead=n_attention_heads,
             dim_feedforward=dim_feedforward,
             dropout=dropout,
@@ -55,7 +57,9 @@ class TransformerPredictor(AbstractPredictor):
         self.transformer = nn.TransformerEncoder(self.encoder_layer, n_layers)
 
         self.final_layer = nn.Sequential(
-            nn.Linear((self.n_unique_features + 1) * self.sequence_length + 2, hidden_size), # +1 from positional encoding
+            nn.Linear(
+                (self.n_unique_features + 1) * self.sequence_length + 2, hidden_size
+            ),  # +1 from positional encoding
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_size, 1),

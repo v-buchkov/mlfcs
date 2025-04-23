@@ -15,4 +15,6 @@ class NormalNLL(AbstractCustomLoss):
         *args,
         **kwargs,
     ) -> torch.Tensor:
-        return (torch.log(pred_vol + 1e-12) + true_returns**2 / (pred_vol + 1e-12)).sum()
+        return (
+            torch.log(pred_vol + 1e-12) + true_returns**2 / (pred_vol + 1e-12)
+        ).sum()

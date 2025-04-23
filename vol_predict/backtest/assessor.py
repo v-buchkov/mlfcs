@@ -128,19 +128,31 @@ class Assessor:
 
     def save(self) -> None:
         if self.assessment_result is None:
-            raise RuntimeError("Model is not assessed yet! Please, call to Assessor()(model)")
+            raise RuntimeError(
+                "Model is not assessed yet! Please, call to Assessor()(model)"
+            )
 
         new_results = self.assessment_result.get_df(self.model_name)
 
-        if self.experiment_config.RESULTS_FILENAME in os.listdir(self.experiment_config.PATH_OUTPUT):
-            results = pd.read_csv(self.experiment_config.PATH_OUTPUT / self.experiment_config.RESULTS_FILENAME)
+        if self.experiment_config.RESULTS_FILENAME in os.listdir(
+            self.experiment_config.PATH_OUTPUT
+        ):
+            results = pd.read_csv(
+                self.experiment_config.PATH_OUTPUT
+                / self.experiment_config.RESULTS_FILENAME
+            )
             results = results.set_index("Unnamed: 0")
             results = pd.concat([results, new_results], axis=0)
         else:
             results = new_results.copy()
 
         results = results.drop_duplicates(keep="last")
-        results.to_csv(self.experiment_config.PATH_OUTPUT / Path("full_" + self.experiment_config.RESULTS_FILENAME))
+        results.to_csv(
+            self.experiment_config.PATH_OUTPUT
+            / Path("full_" + self.experiment_config.RESULTS_FILENAME)
+        )
 
         trunc_results = results[~results.index.duplicated(keep="first")]
-        trunc_results.to_csv(self.experiment_config.PATH_OUTPUT / self.experiment_config.RESULTS_FILENAME)
+        trunc_results.to_csv(
+            self.experiment_config.PATH_OUTPUT / self.experiment_config.RESULTS_FILENAME
+        )

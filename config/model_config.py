@@ -38,7 +38,7 @@ class ModelConfig:
     vol_calc_method: VolatilityMethod = VolatilityMethod("squared_returns")
 
     # Transformer
-    n_attention_heads: int = 8 * 11
+    n_attention_heads: int = 11
     dim_feedforward: int = 2048
 
     def dict(self):
