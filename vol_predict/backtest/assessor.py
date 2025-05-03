@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
 
 import torch
 import torch.nn as nn
@@ -58,6 +63,23 @@ class AssessmentResult:
     def __repr__(self) -> str:
         return str(self)
 
+    def get_df(self, model_name: str) -> pd.DataFrame:
+        data = []
+        columns = []
+        for key, value in self.__dict__.items():
+            if isinstance(value, dict):
+                names = list(value.keys())
+                point = list(value.values())
+            else:
+                names = [key]
+                point = [value]
+
+            data += point
+            columns += names
+
+        data = np.array(data)[np.newaxis, :]
+        return pd.DataFrame(data, index=[model_name], columns=columns)
+
 
 class Assessor:
     def __init__(
@@ -70,6 +92,9 @@ class Assessor:
 
         self.experiment_config = experiment_config
         self.model_config = model_config
+
+        self.assessment_result = None
+        self.model_name = None
 
         self.ml_metrics = MlMetrics(model_config.metrics)
 
@@ -87,13 +112,47 @@ class Assessor:
         true_vols = torch.tensor(model_preds[:, 1])
         model_preds_tensor = torch.tensor(model_preds[:, 2])
 
-        return AssessmentResult(
+        self.assessment_result = AssessmentResult(
             mean_model_loss=model_loss,
             mean_val_loss=model_loss,
             mean_pred_vol=torch.sqrt(model_preds_tensor.mean()),
             mean_true_vol=torch.sqrt(true_vols.mean()),
             ml_metrics=self.ml_metrics(true_returns, true_vols, model_preds_tensor),
         )
+        self.model_name = model.__class__.__name__
+
+        return self.assessment_result
 
     def __call__(self, model: AbstractPredictor) -> AssessmentResult:
         return self.run(model)
+
+    def save(self) -> None:
+        if self.assessment_result is None:
+            raise RuntimeError(
+                "Model is not assessed yet! Please, call to Assessor()(model)"
+            )
+
+        new_results = self.assessment_result.get_df(self.model_name)
+
+        if self.experiment_config.RESULTS_FILENAME in os.listdir(
+            self.experiment_config.PATH_OUTPUT
+        ):
+            results = pd.read_csv(
+                self.experiment_config.PATH_OUTPUT
+                / self.experiment_config.RESULTS_FILENAME
+            )
+            results = results.set_index("Unnamed: 0")
+            results = pd.concat([results, new_results], axis=0)
+        else:
+            results = new_results.copy()
+
+        results = results.drop_duplicates(keep="last")
+        results.to_csv(
+            self.experiment_config.PATH_OUTPUT
+            / Path("full_" + self.experiment_config.RESULTS_FILENAME)
+        )
+
+        trunc_results = results[~results.index.duplicated(keep="first")]
+        trunc_results.to_csv(
+            self.experiment_config.PATH_OUTPUT / self.experiment_config.RESULTS_FILENAME
+        )

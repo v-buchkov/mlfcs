@@ -81,6 +81,11 @@ class ExperimentConfig:
         metadata={"docs": "Relative path to data folder"},
     )
 
+    RESULTS_FILENAME: str = field(
+        default="results.csv",
+        metadata={"docs": "File with all experimental results"},
+    )
+
     # Technical Settings
     NUM_WORKERS: int = field(
         default=2, metadata={"docs": "Number of available workers"}

@@ -9,7 +9,6 @@ from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler
 
 from vol_predict.loss.abstract_custom_loss import AbstractCustomLoss
-from vol_predict.models.dl.lstm_predictor import LSTMPredictor
 from vol_predict.models.abstract_predictor import AbstractPredictor
 
 
@@ -79,10 +78,6 @@ def train_epoch(
     if has_cuda:
         scaler = GradScaler()
 
-    if isinstance(model, LSTMPredictor):
-        h_t = None
-        c_t = None
-
     train_loss = 0.0
     pred_path = []
     model.train()
@@ -97,20 +92,11 @@ def train_epoch(
 
         if has_cuda:
             with torch.autocast(device_type="cuda", dtype=torch.float16):
-                if isinstance(model, LSTMPredictor):
-                    pred_vol, (h_t, c_t) = model(
-                        features=features,
-                        past_returns=past_returns,
-                        past_vols=past_vols,
-                        hidden=None,
-                        memory=None,
-                    )
-                else:
-                    pred_vol = model(
-                        features=features,
-                        past_returns=past_returns,
-                        past_vols=past_vols,
-                    )
+                pred_vol = model(
+                    features=features,
+                    past_returns=past_returns,
+                    past_vols=past_vols,
+                )
 
                 loss = criterion(true_returns, true_vols, pred_vol)
 
@@ -120,20 +106,9 @@ def train_epoch(
 
             scaler.update()
         else:
-            if isinstance(model, LSTMPredictor):
-                pred_vol, (h_t, c_t) = model(
-                    features=features,
-                    past_returns=past_returns,
-                    past_vols=past_vols,
-                    hidden=None,
-                    memory=None,
-                )
-                h_t = h_t.detach()
-                c_t = c_t.detach()
-            else:
-                pred_vol = model(
-                    features=features, past_returns=past_returns, past_vols=past_vols
-                )
+            pred_vol = model(
+                features=features, past_returns=past_returns, past_vols=past_vols
+            )
 
             loss = criterion(true_returns, true_vols, pred_vol)
 
@@ -179,10 +154,6 @@ def validation_epoch(
     model.eval()
     pred_path = []
 
-    if isinstance(model, LSTMPredictor):
-        h_t = None
-        c_t = None
-
     for features, past_returns, past_vols, true_returns, true_vols in iterator:
         features = features.to(device)
         past_returns = past_returns.to(device)
@@ -190,18 +161,9 @@ def validation_epoch(
         true_returns = true_returns.to(device)
         true_vols = true_vols.to(device)
 
-        if isinstance(model, LSTMPredictor):
-            pred_vol, (h_t, c_t) = model(
-                features=features,
-                past_returns=past_returns,
-                past_vols=past_vols,
-                hidden=None,
-                memory=None,
-            )
-        else:
-            pred_vol = model(
-                features=features, past_returns=past_returns, past_vols=past_vols
-            )
+        pred_vol = model(
+            features=features, past_returns=past_returns, past_vols=past_vols
+        )
 
         loss = criterion(true_returns, true_vols, pred_vol)
 
