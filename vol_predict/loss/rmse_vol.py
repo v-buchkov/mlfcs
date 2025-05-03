@@ -1,10 +1,9 @@
 import torch
-import torch.nn as nn
 
-from vol_predict.loss.abstract_custom_loss import AbstractCustomLoss
+from vol_predict.loss.mse_vol import MSEVolLoss
 
 
-class MSEVolLoss(AbstractCustomLoss):
+class RMSEVolLoss(MSEVolLoss):
     def __init__(self):
         super().__init__()
 
@@ -16,4 +15,4 @@ class MSEVolLoss(AbstractCustomLoss):
         *args,
         **kwargs,
     ) -> torch.Tensor:
-        return nn.MSELoss()(true_vols, pred_vol)
+        return super().forward(true_returns, true_vols, pred_vol).sqrt()
