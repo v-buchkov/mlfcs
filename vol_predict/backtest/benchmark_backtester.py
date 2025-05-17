@@ -7,6 +7,8 @@ from datetime import datetime
 
 from tqdm import tqdm
 
+from sklearn.preprocessing import StandardScaler
+
 
 class BacktestResults():
     def __init__(self,
@@ -15,12 +17,14 @@ class BacktestResults():
                     is_training_expanded: bool = True,
                     forecast_horizon: int = 1,
                     forecasts: pd.DataFrame = None,
+                    label_name: str = None,
                     true_vola: pd.Series = None):
         self.model = model
         self.model_name = model.__class__.__name__
         self.last_train_date = last_train_date
         self.is_training_expanded = is_training_expanded
         self.forecast_horizon = forecast_horizon
+        self.label_name = label_name
 
         if forecasts.shape[0] != true_vola.shape[0]:
             raise ValueError("The number of rows in the forecasts and true volatility must be the same.")
@@ -110,7 +114,7 @@ class BenchmarkBacktester():
         self.test_timestamps = self.dataset.loc[self.first_test_datetime:].index
 
 
-    def backtest(self, model_cls, hyperparams=None, is_multivariate=False) -> BacktestResults:
+    def backtest(self, model_cls, hyperparams=None, is_multivariate=False, y_scaler = 1.0) -> BacktestResults:
         """
         Use this method to fit daily. 
 
@@ -132,9 +136,19 @@ class BenchmarkBacktester():
         else:
             model = model_cls(**hyperparams, is_multivariate=is_multivariate)
 
+        if not hasattr(model, 'label_name'):
+            model.label_name = 'vol'
+        #if not hasattr(model, 'feature_names'):
+
+        # # TODO: perform scaling and what not
+        # scaled_dataset = self.dataset.copy()
+        # scaled_dataset.loc[:, 'vol'] = scaled_dataset.loc[:, 'vol'] / y_scaler
+
+        # scaled_shifted_dataset = self.shifted_dataset.copy()
+        # scaled_shifted_dataset.loc[:, 'vol'] = scaled_shifted_dataset.loc[:, 'vol'] / y_scaler
 
         # Fit the model to the initial training data
-        model.fit(y=self.dataset.loc[:self.last_train_date, 'vol'],
+        model.fit(y=self.dataset.loc[:self.last_train_date, model.label_name],
                   X=self.shifted_dataset.loc[:self.last_train_date, model.feature_names])
 
         # initialize monday counters
@@ -164,18 +178,18 @@ class BenchmarkBacktester():
                         t, once because we are not yet at t, and the other because we are using
                         using features which are lagged once with respect to the label y.
                     """
-                    model.fit(y=self.dataset.loc[:t-pd.Timedelta(hours=1), 'vol'],
+                    model.fit(y=self.dataset.loc[:t-pd.Timedelta(hours=1), model.label_name],
                               X=self.shifted_dataset.loc[:t-pd.Timedelta(hours=1), model.feature_names])
                 else:
                     # refit the model with only the data from t-lookback up to t
-                    model.fit(y=self.dataset.loc[t-lookback:t-pd.Timedelta(hours=1), 'vol'],
+                    model.fit(y=self.dataset.loc[t-lookback:t-pd.Timedelta(hours=1), model.label_name],
                               X=self.shifted_dataset.loc[t-lookback:t-pd.Timedelta(hours=1), model.feature_names])
 
             
             forecasts.loc[t] = model.forecast(steps=self.forecast_horizon,
                                               X=self.shifted_dataset.loc[:t, model.feature_names])
             
-            model.update(new_y = self.dataset.loc[t:t, 'vol'],
+            model.update(new_y = self.dataset.loc[t:t, model.label_name],
                          new_X = self.dataset.loc[t:t, model.feature_names])
 
 
@@ -185,6 +199,7 @@ class BenchmarkBacktester():
                                is_training_expanded=self.is_training_expanded,
                                forecast_horizon=self.forecast_horizon,
                                forecasts=forecasts,
+                               label_name=model.label_name,
                                true_vola=self.dataset.loc[self.first_test_datetime:, 'vol'])
 
 
