@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from typing import Union
 
@@ -16,6 +18,7 @@ class BacktestResults():
                     last_train_date: datetime = datetime.strptime("2018-07-01 00:00:00", "%Y-%m-%d %H:%M:%S"),
                     is_training_expanded: bool = True,
                     forecast_horizon: int = 1,
+                    weekly_metrics: list = None,
                     forecasts: pd.DataFrame = None,
                     label_name: str = None,
                     true_vola: pd.Series = None):
@@ -44,16 +47,29 @@ class BacktestResults():
         self.mse = (self.residuals.loc[first_test_datetime:]**2).mean()
         self.rmse = np.sqrt(self.mse)
         self.mae = (np.abs(self.residuals.loc[first_test_datetime:])).mean()
-    
+
+        self.weekly_metrics_df = pd.DataFrame(weekly_metrics)
+        self.weekly_metrics_mean = self.weekly_metrics_df.mean()
+        self.weekly_metrics_std = self.weekly_metrics_df.std()
+
         print(f"Backtest finished successfully.")
         print("---------------------------------------------------")
         print(f"Model: {self.model_name}")
         print(f"RMSE: {self.rmse:.7f}")
         print(f"MAE:  {self.mae :.7f}")
+        print(f"Weekly RMSE: {self.weekly_metrics_mean.rmse:.7f} +/- {self.weekly_metrics_std.rmse:.7f}")
+        print(f"Weekly MAE:  {self.weekly_metrics_mean.mae:.7f} +/- {self.weekly_metrics_std.mae:.7f}")
         print(f"Expanding training set: {self.is_training_expanded}")
         print(f"Forecast horizon: {self.forecast_horizon}")
         print(f"Test starting date: {self.last_train_date}")    
         print("---------------------------------------------------")
+
+    #def plot(self, figsize=(15, 5), title=None):
+        plt.plot(self.forecasts, label=self.model_name)
+        plt.plot(self.true_vola, label="Realized", alpha=0.5)
+        plt.ylim(0, 0.001)
+        plt.legend()
+        plt.show()
 
 
 
@@ -91,7 +107,7 @@ class BenchmarkBacktester():
         last_train_date: datetime = datetime.strptime("2018-06-30 23:59:59", "%Y-%m-%d %H:%M:%S"),
         is_training_expanded: bool = True,
         forecast_horizon: int = 1,
-        lookback = pd.Timedelta(weeks=4.5),
+        lookback = pd.Timedelta(days=30),
         *args,
         **kwargs,
     ):
@@ -101,9 +117,7 @@ class BenchmarkBacktester():
         self.first_test_datetime = dataset.loc[last_train_date:].index[1]
         self.is_training_expanded = is_training_expanded
         self.forecast_horizon = forecast_horizon
-
-        if not is_training_expanded:
-            self.lookback = lookback
+        self.lookback = lookback
 
         # every monday after the last training date
         self.refit_dates = [day for day in (pd.date_range(start=self.last_train_date, 
@@ -138,14 +152,6 @@ class BenchmarkBacktester():
 
         if not hasattr(model, 'label_name'):
             model.label_name = 'vol'
-        #if not hasattr(model, 'feature_names'):
-
-        # # TODO: perform scaling and what not
-        # scaled_dataset = self.dataset.copy()
-        # scaled_dataset.loc[:, 'vol'] = scaled_dataset.loc[:, 'vol'] / y_scaler
-
-        # scaled_shifted_dataset = self.shifted_dataset.copy()
-        # scaled_shifted_dataset.loc[:, 'vol'] = scaled_shifted_dataset.loc[:, 'vol'] / y_scaler
 
         # Fit the model to the initial training data
         model.fit(y=self.dataset.loc[:self.last_train_date, model.label_name],
@@ -159,6 +165,7 @@ class BenchmarkBacktester():
         forecasts = pd.DataFrame(index = self.test_timestamps,
                                  columns = [f'h{h}' for h in range(1, self.forecast_horizon + 1)])
 
+        self.weekly_metrics = []
         for t in tqdm(self.test_timestamps):
             # Check if we need to refit the model
             if prev_monday < t and t >= next_monday:
@@ -178,14 +185,23 @@ class BenchmarkBacktester():
                         t, once because we are not yet at t, and the other because we are using
                         using features which are lagged once with respect to the label y.
                     """
+
+
                     model.fit(y=self.dataset.loc[:t-pd.Timedelta(hours=1), model.label_name],
                               X=self.shifted_dataset.loc[:t-pd.Timedelta(hours=1), model.feature_names])
+
                 else:
                     # refit the model with only the data from t-lookback up to t
-                    model.fit(y=self.dataset.loc[t-lookback:t-pd.Timedelta(hours=1), model.label_name],
-                              X=self.shifted_dataset.loc[t-lookback:t-pd.Timedelta(hours=1), model.feature_names])
+                    model.fit(y=self.dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), model.label_name],
+                              X=self.shifted_dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), model.feature_names])
 
-            
+
+                weekly_res = self.dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), 'vol'] - forecasts.loc[t-self.lookback:t-pd.Timedelta(hours=1), 'h1']
+                rmse = np.sqrt((weekly_res**2).mean())
+                mae = np.abs(weekly_res).mean()
+                self.weekly_metrics.append({"rmse":rmse, "mae":mae})
+
+
             forecasts.loc[t] = model.forecast(steps=self.forecast_horizon,
                                               X=self.shifted_dataset.loc[:t, model.feature_names])
             
@@ -199,6 +215,7 @@ class BenchmarkBacktester():
                                is_training_expanded=self.is_training_expanded,
                                forecast_horizon=self.forecast_horizon,
                                forecasts=forecasts,
+                               weekly_metrics=self.weekly_metrics,
                                label_name=model.label_name,
                                true_vola=self.dataset.loc[self.first_test_datetime:, 'vol'])
 
