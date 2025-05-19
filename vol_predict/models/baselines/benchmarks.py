@@ -18,11 +18,15 @@ tfb = tfp.bijectors
 vi = tfp.vi
 
 # from sklearn.metrics import root_mean_squared_error, mean_absolute_error, mean_squared_error
-# from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler
 
 from statsmodels.tsa.arima.model import ARIMA
 from arch import arch_model
 from arch.univariate import HARX
+
+from sklearn.linear_model import ElasticNet
+from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
 
 
 class Naive(AbstractBenchmark):
@@ -227,8 +231,24 @@ class ARIMAX(AbstractBenchmark):
         self.is_multivariate = is_multivariate
 
         if is_multivariate:
-            # TODO properly name ob_features
-            self.feature_names = ['mean_spread', 'mean_weighted_spread']
+            self.feature_names = [
+                                'mean_spread',
+                                'mean_bid_depth',
+                                'mean_ask_volume', 
+                                #'mean_bid_volume',
+                                #'mean_volume_diff', 
+                                #'mean_weighted_spread',
+                                'mean_ask_slope',
+                                'mean_bid_slope',
+                                  #'trend_spread',
+                                  #'trend_bid_depth',
+                                  #'trend_ask_volume',
+                                  #'trend_bid_volume', 
+                                  #'trend_volume_diff', 
+                                  #'trend_weighted_spread',
+                                  #'trend_ask_slope', 
+                                  #'trend_bid_slope'
+                                  ]
         else:
             self.feature_names = []
 
@@ -252,7 +272,7 @@ class ARIMAX(AbstractBenchmark):
             self.residuals = self.results.resid
         else:
             self.results = self.model.fit(
-                start_params=self.results.params, # should help with convergence 
+            #    start_params=self.results.params, # should help with convergence 
             )
             self.residuals = self.results.resid
 
@@ -285,7 +305,7 @@ class ARIMAX(AbstractBenchmark):
         self.residuals = self.results.resid
 
 
-class GARCH():
+class GARCH(AbstractBenchmark):
     """
     GARCH volatility predictor (we know already that vola is stationary). 
     Given the past volatility, predict the next one using GARCH model.
@@ -312,8 +332,16 @@ class GARCH():
         self.type = type
 
         if is_multivariate:
-            # TODO properly name ob_features
-            self.feature_names = ['mean_spread', 'mean_weighted_spread']
+            self.feature_names = [
+                                'mean_spread',
+                                'mean_bid_depth',
+                                'mean_ask_volume', 
+                                #'mean_bid_volume',
+                                #'mean_volume_diff', 
+                                #'mean_weighted_spread',
+                                'mean_ask_slope',
+                                'mean_bid_slope',
+                                  ]
         else:
             self.feature_names = []
 
@@ -419,7 +447,7 @@ class GARCH():
         self.results = self.model.fix(self.results.params.values)
 
 
-class HAR():
+class HAR(AbstractBenchmark):
     """
     HAR volatility predictor (we know already that vola is stationary). 
     Given the past volatility, predict the next one using GARCH model.
@@ -437,8 +465,16 @@ class HAR():
         self.is_multivariate = is_multivariate
 
         if is_multivariate:
-            # TODO properly name ob_features
-            self.feature_names = ['mean_spread', 'mean_weighted_spread']
+            self.feature_names = [
+                                'mean_spread',
+                                'mean_bid_depth',
+                                'mean_ask_volume', 
+                                #'mean_bid_volume',
+                                #'mean_volume_diff', 
+                                #'mean_weighted_spread',
+                                'mean_ask_slope',
+                                'mean_bid_slope',
+                                  ]
         else:
             self.feature_names = []
 
@@ -483,7 +519,9 @@ class HAR():
             raise ValueError("Model not fitted yet. Please fit the model first.")
 
         if self.is_multivariate:
-            return self.results.forecast(horizon=steps).mean.values[0][0]
+            X = X.values[-1, :].reshape(-1, 1)
+            X = X[:,: , np.newaxis]
+            return self.results.forecast(horizon=steps, x=X).mean.values[0][0]
         else:
             return self.results.forecast(horizon=steps).mean.values[0][0]
 
@@ -514,12 +552,224 @@ class HAR():
 
 
 
-# RF
-# XGBoost
-# Enet
+class ENET(AbstractBenchmark):
+    """
+    ElasticNet volatility predictor.
+    """
+    def __init__(
+        self,
+        alpha: float,
+        l1_ratio: float,
+        *args,
+        **kwargs,
+    ):
+
+        self.is_multivariate = True
+        self.alpha = alpha
+        self.l1_ratio = l1_ratio
+
+        self.feature_names = [
+                            'mean_spread',
+                            'mean_bid_depth',
+                            'mean_ask_volume', 
+                            #'mean_bid_volume',
+                            #'mean_volume_diff', 
+                            #'mean_weighted_spread',
+                            'mean_ask_slope',
+                            'mean_bid_slope',
+                            'vol_lag1',
+                            'vol_lag2',
+                            'vol_lag3',
+                            'vol_lag4',
+                                ]
 
 
+        self.results = None
 
+        self.label_name = 'vol'
+        
+
+    def fit(self, y: pd.Series, X: pd.DataFrame):
+        """
+        """
+
+        # scale the data
+        self.scalerX = StandardScaler()
+        # self.scalerY = StandardScaler()
+        self.stored_X = self.scalerX.fit_transform(X.values)
+        # self.stored_y = self.scalerY.fit_transform(y.values.reshape(-1, 1)).flatten()
+        self.stored_y = y.values
+
+        self.model = ElasticNet(
+            alpha=self.alpha,
+            l1_ratio=self.l1_ratio,
+            )
+        self.model.fit(self.stored_X, self.stored_y)
+
+    def forecast(self, steps: int = 1, X: pd.DataFrame = None):
+        """
+        Forecast the next steps volatility.
+        """
+        X = X.values[-1, :].reshape(1, -1)
+        X = self.scalerX.transform(X)
+
+        return self.model.predict(X)[0]
+
+
+    def update(self, new_y: pd.Series, new_X: pd.DataFrame):
+        """
+        Update the model with new data.
+        """
+        self.stored_y = np.append(self.stored_y, new_y.values)
+        self.stored_X = np.append(self.stored_X, new_X.values, axis=0)
+
+
+class RF(AbstractBenchmark):
+    """
+    """
+    def __init__(
+        self,
+        n_estimators=100,
+        max_depth=10,
+        min_samples_split=2,
+        *args,
+        **kwargs,
+    ):
+
+        self.is_multivariate = True
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+
+        self.feature_names = [
+                            'mean_spread',
+                            'mean_bid_depth',
+                            'mean_ask_volume', 
+                            #'mean_bid_volume',
+                            #'mean_volume_diff', 
+                            #'mean_weighted_spread',
+                            'mean_ask_slope',
+                            'mean_bid_slope',
+                            'vol_lag1',
+                            'vol_lag2',
+                            'vol_lag3',
+                            'vol_lag4',
+                                ]
+
+
+        self.results = None
+
+        self.label_name = 'vol'
+        
+
+    def fit(self, y: pd.Series, X: pd.DataFrame):
+        """
+        """
+
+        # scale the data
+        self.scalerX = StandardScaler()
+        # self.scalerY = StandardScaler()
+        self.stored_X = self.scalerX.fit_transform(X.values)
+        # self.stored_y = self.scalerY.fit_transform(y.values.reshape(-1, 1)).flatten()
+        self.stored_y = y.values
+
+        self.model = RandomForestRegressor(
+            n_estimators= self.n_estimators,
+            max_depth = self.max_depth,
+            min_samples_split = self.min_samples_split,
+        )
+        self.model.fit(self.stored_X, self.stored_y)
+
+    def forecast(self, steps: int = 1, X: pd.DataFrame = None):
+        """
+        Forecast the next steps volatility.
+        """
+        X = X.values[-1, :].reshape(1, -1)
+        X = self.scalerX.transform(X)
+
+        return self.model.predict(X)[0]
+
+
+    def update(self, new_y: pd.Series, new_X: pd.DataFrame):
+        """
+        Update the model with new data.
+        """
+        self.stored_y = np.append(self.stored_y, new_y.values)
+        self.stored_X = np.append(self.stored_X, new_X.values, axis=0)
+
+    
+class XGBM(AbstractBenchmark):
+    """
+    """
+    def __init__(
+        self,
+        n_estimators=100,
+        max_depth=10,
+        min_samples_split=2,
+        *args,
+        **kwargs,
+    ):
+
+        self.is_multivariate = True
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+
+        self.feature_names = [
+                            'mean_spread',
+                            'mean_bid_depth',
+                            'mean_ask_volume', 
+                            #'mean_bid_volume',
+                            #'mean_volume_diff', 
+                            #'mean_weighted_spread',
+                            'mean_ask_slope',
+                            'mean_bid_slope',
+                            'vol_lag1',
+                            'vol_lag2',
+                            'vol_lag3',
+                            'vol_lag4',
+                                ]
+
+
+        self.results = None
+
+        self.label_name = 'vol'
+        
+
+    def fit(self, y: pd.Series, X: pd.DataFrame):
+        """
+        """
+
+        # scale the data
+        self.scalerX = StandardScaler()
+        # self.scalerY = StandardScaler()
+        self.stored_X = self.scalerX.fit_transform(X.values)
+        # self.stored_y = self.scalerY.fit_transform(y.values.reshape(-1, 1)).flatten()
+        self.stored_y = y.values
+
+        self.model = XGBRegressor(
+            n_estimators= self.n_estimators,
+            max_depth = self.max_depth,
+            min_samples_split = self.min_samples_split,
+        )
+        self.model.fit(self.stored_X, self.stored_y)
+
+    def forecast(self, steps: int = 1, X: pd.DataFrame = None):
+        """
+        Forecast the next steps volatility.
+        """
+        X = X.values[-1, :].reshape(1, -1)
+        X = self.scalerX.transform(X)
+
+        return self.model.predict(X)[0]
+
+
+    def update(self, new_y: pd.Series, new_X: pd.DataFrame):
+        """
+        Update the model with new data.
+        """
+        self.stored_y = np.append(self.stored_y, new_y.values)
+        self.stored_X = np.append(self.stored_X, new_X.values, axis=0)
 
 
 class STS(AbstractBenchmark):
@@ -632,7 +882,7 @@ class STS(AbstractBenchmark):
     # This function takes an univariate time series dataset y and fits our structural time series to the given data y 
     # via variational inference. By defautl, we use a learning rate of 1e-3 and 1e5 iterations. The function returns
     # the ELBO loss recorded during training and returns it.
-    # @tf.function(reduce_retracing=True)
+    @tf.function(reduce_retracing=True)
     def _fit(self, y_stdized, X_stdized):
         self.X_train = tf.convert_to_tensor(X_stdized, dtype=tf.float32)
         self.y_train = tf.convert_to_tensor(y_stdized, dtype=tf.float32)
@@ -669,7 +919,7 @@ class STS(AbstractBenchmark):
         # back to original scale
         m = m_std * self.y_std + self.y_mean
         s = s_std * self.y_std
-        preds.append({"y_pred_mean": m, "y_pred_std": s})
+        self.preds.append({"y_pred_mean": m, "y_pred_std": s})
 
         return np.exp(m+0.5*s**2)
         
