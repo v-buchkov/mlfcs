@@ -67,7 +67,7 @@ def run_backtest(
 
     run_result = runner(model=model, baseline=baseline)
 
-    return run_result, model, baseline
+    return run_result
 
 
 if __name__ == "__main__":
