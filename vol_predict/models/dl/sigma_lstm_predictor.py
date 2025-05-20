@@ -20,7 +20,12 @@ class SigmaLSTMCell(nn.Module):
 
     def forward(self, input, state):
         hx, cx = state
-        gates = (input @ self.weight_ih.T + self.bias_ih + hx @ self.weight_hh.T + self.bias_hh)
+        gates = (
+            input @ self.weight_ih.T
+            + self.bias_ih
+            + hx @ self.weight_hh.T
+            + self.bias_hh
+        )
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
         ingate = torch.sigmoid(ingate)
@@ -56,7 +61,9 @@ class SigmaLSTMPredictor(AbstractPredictor):
 
         torch.manual_seed(12)
 
-        self.lstm_cells = nn.Sequential(*[SigmaLSTMCell(1, hidden_size) for _ in range(self.n_layers)])
+        self.lstm_cells = nn.Sequential(
+            *[SigmaLSTMCell(1, hidden_size) for _ in range(self.n_layers)]
+        )
 
         for name, param in self.named_parameters():
             if "weight_hh" in name:

@@ -88,16 +88,22 @@ class BayesianSequentialRunner:
             self.model_config.n_unique_features = np.unique(unique_columns).shape[0]
 
         if self.verbose:
-            print(
-                f"Available data from {data.index.min()} to {data.index.max()}"
-            )  # noqa: T201
+            print(f"Available data from {data.index.min()} to {data.index.max()}")  # noqa: T201
 
-    def _get_dataloader(self, time_start: pd.Timestamp, time_end: pd.Timestamp, is_train: bool = True) -> DataLoader:
+    def _get_dataloader(
+        self, time_start: pd.Timestamp, time_end: pd.Timestamp, is_train: bool = True
+    ) -> DataLoader:
         init_features = self.features.loc[time_start:time_end]
 
         if init_features.ndim > 1 and init_features.shape[0] != 0:
-            features = self._scaler.fit_transform(init_features) if is_train else self._scaler.transform(init_features)
-            features = pd.DataFrame(features, columns=init_features.columns, index=init_features.index)
+            features = (
+                self._scaler.fit_transform(init_features)
+                if is_train
+                else self._scaler.transform(init_features)
+            )
+            features = pd.DataFrame(
+                features, columns=init_features.columns, index=init_features.index
+            )
         else:
             features = init_features
 
@@ -137,13 +143,21 @@ class BayesianSequentialRunner:
             train_loader = self._get_dataloader(train_start, train_end, is_train=True)
 
             last_train_end = train_end
-            train_start = train_start + pd.Timedelta(days=step) if self.experiment_config.EXPANDING else train_start
+            train_start = (
+                train_start + pd.Timedelta(days=step)
+                if self.experiment_config.EXPANDING
+                else train_start
+            )
             train_end = train_end + pd.Timedelta(days=step)
-            test_loader = self._get_dataloader(last_train_end + pd.Timedelta(milliseconds=1), train_end, is_train=False)
+            test_loader = self._get_dataloader(
+                last_train_end + pd.Timedelta(milliseconds=1), train_end, is_train=False
+            )
 
             if len(train_loader.dataset) > 0 and len(test_loader.dataset) > 0:
                 if self.experiment_config.RETRAIN:
-                    if np.mean(uncerts) > np.mean(uncert_history) + np.std(uncert_history):
+                    if np.mean(uncerts) > np.mean(uncert_history) + np.std(
+                        uncert_history
+                    ):
                         model = model.__class__(**self.model_config.dict())
                         baseline = baseline.__class__(**self.model_config.dict())
 
@@ -185,9 +199,32 @@ class BayesianSequentialRunner:
                 )
                 baseline_preds = baseline_preds_full[:, 2]
 
-                rolling_results.append([last_train_end, model_loss, baseline_loss, true_returns, true_vols, model_preds, uncerts, baseline_preds])
+                rolling_results.append(
+                    [
+                        last_train_end,
+                        model_loss,
+                        baseline_loss,
+                        true_returns,
+                        true_vols,
+                        model_preds,
+                        uncerts,
+                        baseline_preds,
+                    ]
+                )
 
-        return pd.DataFrame(rolling_results, columns=["datetime", "model_loss", "baseline_loss", "true_returns", "true_vols", "model_preds", "model_uncerts", "baseline_preds"]).set_index("datetime")
+        return pd.DataFrame(
+            rolling_results,
+            columns=[
+                "datetime",
+                "model_loss",
+                "baseline_loss",
+                "true_returns",
+                "true_vols",
+                "model_preds",
+                "model_uncerts",
+                "baseline_preds",
+            ],
+        ).set_index("datetime")
 
     def __call__(
         self,

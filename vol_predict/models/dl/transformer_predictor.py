@@ -96,7 +96,9 @@ class TransformerPredictor(AbstractPredictor):
 
         out = positional_encoding(features, model_device, self.sequence_length)
 
-        mask = self.generate_square_subsequent_mask(self.sequence_length, device=model_device)
+        mask = self.generate_square_subsequent_mask(
+            self.sequence_length, device=model_device
+        )
 
         # Pass the output from the previous steps through the transformer encoder
         out = self.transformer(out, mask=mask, is_causal=True)

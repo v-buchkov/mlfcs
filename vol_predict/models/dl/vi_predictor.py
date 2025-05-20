@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import torch
-import torch.nn as nn
 
 from vol_predict.models.abstract_predictor import AbstractPredictor
 from vol_predict.models.dl.lstm_vi_softplus_predictor import LSTMViSoftplusPredictor
@@ -64,11 +63,15 @@ class ViPredictor(AbstractPredictor):
 
         # print("Naive")
         # print(self.naive(past_returns, past_vols, features))
-        uncert_scaled = (uncert - min(self.seen_uncerts)) / (max(self.seen_uncerts) - min(self.seen_uncerts) + 1e-6)
+        uncert_scaled = (uncert - min(self.seen_uncerts)) / (
+            max(self.seen_uncerts) - min(self.seen_uncerts) + 1e-6
+        )
         weight_lstm = 1 - torch.clamp(uncert_scaled, 0, 1) + 1e-6
         # print(weight_lstm)
 
-        pred = weight_lstm * lstm_pred + (1 - weight_lstm) * self.naive(past_returns, past_vols, features)
+        pred = weight_lstm * lstm_pred + (1 - weight_lstm) * self.naive(
+            past_returns, past_vols, features
+        )
         # print(pred)
         # self.c += 1
 
