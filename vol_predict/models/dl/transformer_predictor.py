@@ -71,6 +71,12 @@ class TransformerPredictor(AbstractPredictor):
             elif "weight_ih" in name:
                 nn.init.xavier_uniform_(param)  # Xavier initialization
 
+    @staticmethod
+    def generate_square_subsequent_mask(size, device):
+        filled = torch.full(size=(size, size), fill_value=-torch.inf, device=device)
+        mask = torch.triu(filled, diagonal=1)
+        return mask
+
     def _forward(
         self,
         past_returns: torch.Tensor,
@@ -90,8 +96,10 @@ class TransformerPredictor(AbstractPredictor):
 
         out = positional_encoding(features, model_device, self.sequence_length)
 
+        mask = self.generate_square_subsequent_mask(self.sequence_length, device=model_device)
+
         # Pass the output from the previous steps through the transformer encoder
-        out = self.transformer(out)
+        out = self.transformer(out, mask=mask, is_causal=True)
 
         out = torch.reshape(out, (out.shape[0], out.shape[1] * out.shape[2]))
 

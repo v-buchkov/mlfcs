@@ -20,6 +20,7 @@ class NaivePredictor(AbstractPredictor):
         past_vols: torch.Tensor,
         features: torch.Tensor,
     ) -> torch.Tensor:
-        pred_vols = torch.ones_like(past_returns) * np.mean(self._trailing_vars)
+        vol_est = np.mean(self._trailing_vars) if len(self._trailing_vars) > 0 else 0
+        pred_vols = torch.ones_like(past_returns) * vol_est
         self._trailing_vars += past_vols.tolist()
         return pred_vols

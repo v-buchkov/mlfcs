@@ -11,6 +11,8 @@ import torch
 from config.model_config import ModelConfig
 from config.experiment_config import ExperimentConfig
 from vol_predict.runner import Runner
+from vol_predict.sequential_runner import SequentialRunner
+from vol_predict.bayesian_sequential_runner import BayesianSequentialRunner
 from vol_predict.features.base_preprocessor import BasePreprocessor
 
 from vol_predict.models.abstract_predictor import AbstractPredictor
@@ -22,6 +24,30 @@ def initialize_runner(
     experiment_config: ExperimentConfig = ExperimentConfig(),
 ) -> Runner:
     return Runner(
+        preprocessor=preprocessor,
+        model_config=model_config,
+        experiment_config=experiment_config,
+    )
+
+
+def initialize_sequential_runner(
+    model_config: ModelConfig,
+    preprocessor: BasePreprocessor,
+    experiment_config: ExperimentConfig = ExperimentConfig(),
+) -> SequentialRunner:
+    return SequentialRunner(
+        preprocessor=preprocessor,
+        model_config=model_config,
+        experiment_config=experiment_config,
+    )
+
+
+def initialize_bayesian_sequential_runner(
+    model_config: ModelConfig,
+    preprocessor: BasePreprocessor,
+    experiment_config: ExperimentConfig = ExperimentConfig(),
+) -> BayesianSequentialRunner:
+    return BayesianSequentialRunner(
         preprocessor=preprocessor,
         model_config=model_config,
         experiment_config=experiment_config,
@@ -41,7 +67,7 @@ def run_backtest(
 
     run_result = runner(model=model, baseline=baseline)
 
-    return run_result
+    return run_result, model, baseline
 
 
 if __name__ == "__main__":
