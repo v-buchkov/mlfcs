@@ -14,20 +14,22 @@ from sklearn.preprocessing import StandardScaler
 
 class BacktestResults():
     def __init__(self,
-                    model,
-                    last_train_date: datetime = datetime.strptime("2018-07-01 00:00:00", "%Y-%m-%d %H:%M:%S"),
-                    is_training_expanded: bool = True,
-                    forecast_horizon: int = 1,
-                    weekly_metrics: list = None,
-                    forecasts: pd.DataFrame = None,
-                    label_name: str = None,
-                    true_vola: pd.Series = None):
+                model,
+                last_train_date: datetime = datetime.strptime("2018-07-01 00:00:00", "%Y-%m-%d %H:%M:%S"),
+                is_training_expanded: bool = True,
+                forecast_horizon: int = 1,
+                weekly_metrics: list = None,
+                forecasts: pd.DataFrame = None,
+                label_name: str = None,
+                feature_names: list = None,
+                true_vola: pd.Series = None):
         self.model = model
-        self.model_name = model.__class__.__name__
+        self.model_name = model.name
         self.last_train_date = last_train_date
         self.is_training_expanded = is_training_expanded
         self.forecast_horizon = forecast_horizon
         self.label_name = label_name
+        self.feature_names = feature_names
 
         if forecasts.shape[0] != true_vola.shape[0]:
             raise ValueError("The number of rows in the forecasts and true volatility must be the same.")
@@ -60,17 +62,22 @@ class BacktestResults():
         print(f"Weekly RMSE: {self.weekly_metrics_mean.rmse:.7f} +/- {self.weekly_metrics_std.rmse:.7f}")
         print(f"Weekly MAE:  {self.weekly_metrics_mean.mae:.7f} +/- {self.weekly_metrics_std.mae:.7f}")
         print(f"Expanding training set: {self.is_training_expanded}")
-        print(f"Forecast horizon: {self.forecast_horizon}")
+        #print(f"Forecast horizon: {self.forecast_horizon}")
         print(f"Test starting date: {self.last_train_date}")    
         print("---------------------------------------------------")
+        print(f"Latex formatting:")
+        # this print is not 
+        print(f"{self.model_name} &  "
+            + f"{(1e3 * self.weekly_metrics_mean.rmse):.7f} &  "
+            + f"{(1e3 * self.weekly_metrics_std.rmse):.7f}  &  "
+            + f"{(1e3 * self.weekly_metrics_mean.mae):.7f}  &  "
+            + f"{(1e3 *self.weekly_metrics_std.mae):.7f}  \\\\")
 
-    #def plot(self, figsize=(15, 5), title=None):
         plt.plot(self.forecasts, label=self.model_name)
         plt.plot(self.true_vola, label="Realized", alpha=0.5)
         plt.ylim(0, 0.001)
         plt.legend()
         plt.show()
-
 
 
 class BenchmarkBacktester():
@@ -84,22 +91,6 @@ class BenchmarkBacktester():
     - forecast: forecast the next steps volatility
     - update: update the model with new observation without refitting.
 
-    TODO maybe
-    - get_params: get the parameters of the model
-    - get_residuals: get the residuals of the model
-    - summary: return a summary of the model (statsmodels style, or similar)
-
-    Parameters
-    ----------
-    model: ModelWrap
-        The model to be used for the backtest.
-
-        Currently supported models are instances of:
-        - `arch_model` from `arch` package
-        - statsmodels.tsa.arima.model.ARIMA
-        - statsmodels.tsa.statespace.sarimax.SARIMAX
-        - our own EWMA model
-
     """
     def __init__(
         self,
@@ -111,8 +102,10 @@ class BenchmarkBacktester():
         *args,
         **kwargs,
     ):
-        self.dataset = dataset.iloc[1:,:]
-        self.shifted_dataset = dataset.copy().shift(1).dropna() 
+        """
+        TODO add docstring
+        """
+        self.dataset = dataset
         self.last_train_date = last_train_date
         self.first_test_datetime = dataset.loc[last_train_date:].index[1]
         self.is_training_expanded = is_training_expanded
@@ -128,34 +121,23 @@ class BenchmarkBacktester():
         self.test_timestamps = self.dataset.loc[self.first_test_datetime:].index
 
 
-    def backtest(self, model_cls, hyperparams=None, is_multivariate=False, y_scaler = 1.0) -> BacktestResults:
+    def backtest(self, model_cls, hyperparams=None, use_ob_feats=True) -> BacktestResults:
         """
-        Use this method to fit daily. 
-
-        Parameters
-        ----------
-        model : object
-            The model class to be used for the backtest. It should implement the following methods:
-            - fit: fit the model to the data
-            - forecast: forecast the next steps volatility
-            - update: update the model with new observation without refitting.
+        TODO add docstring
         """
 
         # Instantiate the model. 
         if hyperparams is None:
-            if is_multivariate:
-                model = model_cls(is_multivariate=is_multivariate)
-            else:
-                model = model_cls()
+            model = model_cls(use_ob_feats=use_ob_feats)
         else:
-            model = model_cls(**hyperparams, is_multivariate=is_multivariate)
-
+            model = model_cls(**hyperparams, use_ob_feats=use_ob_feats)
+    
         if not hasattr(model, 'label_name'):
             model.label_name = 'vol'
 
         # Fit the model to the initial training data
         model.fit(y=self.dataset.loc[:self.last_train_date, model.label_name],
-                  X=self.shifted_dataset.loc[:self.last_train_date, model.feature_names])
+                  X=self.dataset.loc[:self.last_train_date, model.feature_names])
 
         # initialize monday counters
         prev_monday = self.refit_dates[0] - pd.Timedelta(days=7)
@@ -166,6 +148,7 @@ class BenchmarkBacktester():
                                  columns = [f'h{h}' for h in range(1, self.forecast_horizon + 1)])
 
         self.weekly_metrics = []
+        first_week = True
         for t in tqdm(self.test_timestamps):
             # Check if we need to refit the model
             if prev_monday < t and t >= next_monday:
@@ -181,29 +164,30 @@ class BenchmarkBacktester():
                         Then, forecasting is done using the data up to t (including t) but we reference
                         to the lagged data (shifted_dataset) to forecast the next steps. 
                         
-                        So, X=shifted_dataset.loc[:t-pd.Timedelta(hours=1)] is two steps behind the
+                        So, X=dataset.loc[:t-pd.Timedelta(hours=1)] is two steps behind the
                         t, once because we are not yet at t, and the other because we are using
                         using features which are lagged once with respect to the label y.
                     """
-
-
                     model.fit(y=self.dataset.loc[:t-pd.Timedelta(hours=1), model.label_name],
-                              X=self.shifted_dataset.loc[:t-pd.Timedelta(hours=1), model.feature_names])
+                              X=self.dataset.loc[:t-pd.Timedelta(hours=1), model.feature_names])
 
                 else:
                     # refit the model with only the data from t-lookback up to t
                     model.fit(y=self.dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), model.label_name],
-                              X=self.shifted_dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), model.feature_names])
+                              X=self.dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), model.feature_names])
 
-
-                weekly_res = self.dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), 'vol'] - forecasts.loc[t-self.lookback:t-pd.Timedelta(hours=1), 'h1']
-                rmse = np.sqrt((weekly_res**2).mean())
-                mae = np.abs(weekly_res).mean()
-                self.weekly_metrics.append({"rmse":rmse, "mae":mae})
+                if first_week:
+                    first_week = False
+                else:
+                    weekly_res = (self.dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), 'vol'] 
+                                   - forecasts.loc[t-self.lookback:t-pd.Timedelta(hours=1), 'h1'])
+                    rmse = np.sqrt((weekly_res**2).mean())
+                    mae = np.abs(weekly_res).mean()
+                    self.weekly_metrics.append({"rmse":rmse, "mae":mae})
 
 
             forecasts.loc[t] = model.forecast(steps=self.forecast_horizon,
-                                              X=self.shifted_dataset.loc[:t, model.feature_names])
+                                              X=self.dataset.loc[:t, model.feature_names])
             
             model.update(new_y = self.dataset.loc[t:t, model.label_name],
                          new_X = self.dataset.loc[t:t, model.feature_names])
@@ -217,6 +201,7 @@ class BenchmarkBacktester():
                                forecasts=forecasts,
                                weekly_metrics=self.weekly_metrics,
                                label_name=model.label_name,
+                               feature_names=model.feature_names,
                                true_vola=self.dataset.loc[self.first_test_datetime:, 'vol'])
 
 
