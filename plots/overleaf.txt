@@ -1,0 +1,847 @@
+%Please use LuaLaTeX or XeLaTeX
+\documentclass[11pt,aspectratio=169]{beamer}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{fontawesome5}
+\usepackage{tabularx}
+\usepackage[style=authoryear,backend=bibtex]{biblatex}
+\bibliography{mybib}
+
+\usetikzlibrary{shapes.symbols, positioning}
+\usetikzlibrary{positioning}
+\title{Bitcoin volatility forecasting}
+\date[May 2025]{19 May 2025}
+\author{Konrad Ochedzan, Viacheslav Buchkov, Miroslav Zivanovic, Marcus Imris}
+\institute{Machine Learning for Finance\\ and Complex Systems}
+
+\usetheme{eth}
+
+\colorlet{titlefgcolor}{ETHBlue}
+\colorlet{accentcolor}{ETHRed}
+
+\begin{document}
+
+%\def\titlefigure{elements/title-page-image}		% Default image
+%\def\titlefigure{elements/title-page-image-43}	% Use this for 4:3 presentations
+
+\titleframe
+
+\tocframe
+
+\section{Introduction}
+
+\begin{frame}
+    \frametitle{Data Preparation}
+
+    \vspace{0.3cm}
+
+    \begin{itemize}
+       \item \textbf{Orderbook Features}:
+       \vspace{-2mm}
+       \begin{enumerate}
+           \item \textit{Bid-Ask Spread} - signal of market-makers and other agents about microstructure volatility
+           \item \textit{Ask \& Bid Depths} - how much an agent with large volume can buy/sell
+           \item \textit{Depth Difference} - change in skew of buyers versus sellers
+           \item \textit{Ask \& Bid Volumes} - size of orders from buyers and sellers
+           \item \textit{Volume Difference} - overall imbalance of buyers vs sellers
+           \item \textit{Weighted Spread} - how much one can shift the market with large volume order to buy versus to sell
+           \item \textit{Ask \& Bid Slopes} - how much of existing volume one may shift to execute a large order
+       \end{enumerate}
+   \end{itemize}
+    
+    \vspace{0.4cm}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Dataset}
+    
+    \textbf{Data:} Orderbook + Trades: 2018-06-04 23:00:00 - 2018-09-30 21:00:00
+    
+    \textbf{Target:} Hourly quadratic variation of the returns on trades within this hour: $$y=\sum_{t=1}^T r_s^2$$ under $s \in [t, T)$ for $T$ - 1 hour and $s$ enumerating the trades.
+
+    \vspace{0.3cm}
+
+    \begin{itemize}
+           \item \textbf{Features}:
+           \vspace{-2mm}
+           \begin{itemize}
+                \item Compute orderbook features for each snapshot
+                \item Resample orderbook features for every 30s
+                \item Add 5min returns in history (for $\sigma$-LSTM) to avoid sparsity
+                \item Append the data up to 30 seconds \textbf{before the QV accrual starts}
+                \item End up with $12$ returns + $120$ OB features for each target point
+           \end{itemize}
+       \end{itemize}
+    
+    \vspace{0.4cm}
+\end{frame}
+
+\begin{frame}{Orderbook Initial}
+\begin{figure}[h]
+    \centering
+    \begin{minipage}{0.69\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{latex_praesentation/initial_ob.png}
+        \label{fig:initial-orderbook}
+    \end{minipage}
+\end{figure}
+\vspace{-5mm}
+\end{frame}
+
+\begin{frame}{Orderbook Cleaned}
+\begin{figure}[h]
+    \centering
+    \begin{minipage}{0.69\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{latex_praesentation/cleaned_ob.png}
+        \label{fig:cleaned-orderbook}
+    \end{minipage}
+\end{figure}
+\vspace{-5mm}
+\end{frame}
+
+\section{TS Neural Networks}
+
+\begin{frame}{Neural Networks Experiments (1/3)}
+
+    \vspace{0.3cm}
+
+    \begin{itemize}
+           \item \textbf{Prior Knowlegde On Volatility}:
+           \vspace{-2mm}
+           \begin{itemize}
+                \item Volatility is autoregressive and mean-reverting.
+                \item Order-book captures information from potential future trades that will shift volatility level.
+                \item However, market exhibits different regimes throughout the dataset.
+                \newline $\;\textcolor{blue}{\Rightarrow}\;$ Challenge to use sequential learning throughout the whole dataset.
+           \end{itemize}
+       \end{itemize}
+    
+    \vspace{0.4cm}
+\end{frame}
+
+\begin{frame}{Neural Networks Experiments (2/3)}
+
+    \vspace{0.3cm}
+
+    \begin{itemize}
+           \item \textbf{Prior Knowlegde On Volatility}:
+           \vspace{-2mm}
+           \begin{itemize}
+                \item Volatility is autoregressive and mean-reverting.
+                \item Order-book captures information from potential future trades that will shift volatility level.
+                \item However, market exhibits different regimes throughout the dataset.
+                \newline $\;\textcolor{blue}{\Rightarrow}\;$ Challenge to use sequential learning throughout the whole dataset.
+           \end{itemize}
+           \item \textbf{Outline Of Models}: 
+           \vspace{-2mm}
+           \begin{itemize}
+               \item MLP
+               \item \textbf{LSTM}, $\sigma$-LSTM
+               \item Transformer (Encoder)
+               \item NBeats (\textcite{nbeats})
+               \item PatchTST (\textcite{patchtst})
+               \newline $\;\textcolor{blue}{\Rightarrow}\;$ Rolling regression to predict 1 week / 1 day out-of-sample.
+           \end{itemize}
+       \end{itemize}
+    
+    \vspace{0.4cm}
+\end{frame}
+
+\begin{frame}{Neural Networks Experiments (3/3)}
+
+    \vspace{0.3cm}
+
+    \begin{itemize}
+           \item \textbf{Prior Knowlegde On Volatility}:
+           \vspace{-2mm}
+           \begin{itemize}
+                \item Volatility is autoregressive and mean-reverting.
+                \item Order-book captures information from potential future trades that will shift volatility level.
+                \item However, market exhibits different regimes throughout the dataset.
+                \newline $\;\textcolor{blue}{\Rightarrow}\;$ Challenge to use sequential learning throughout the whole dataset.
+           \end{itemize}
+           \item \textbf{Outline Of Models}: 
+           \vspace{-2mm}
+           \begin{itemize}
+               \item MLP
+               \item \textbf{LSTM}, $\sigma$-LSTM
+               \item Transformer (Encoder)
+               \item NBeats (\textcite{nbeats})
+               \item PatchTST (\textcite{patchtst})
+               \newline $\;\textcolor{blue}{\Rightarrow}\;$ Rolling regression to predict 1 week / 1 day out-of-sample.
+           \end{itemize}
+            \item \textbf{Epistemic Uncertainty Modelling} (Our Improvement): 
+           \vspace{-2mm}
+           \begin{itemize}
+               \item Apply Bayesian Learning (Bayes by Backprop / Variational Dropout)
+               \newline $\;\textcolor{blue}{\Rightarrow}\;$ Use \textbf{uncertainty} of the model estimation to catch structural breaks / balance model point estimates versus baseline.
+           \end{itemize}
+       \end{itemize}
+    
+    \vspace{0.4cm}
+\end{frame}
+
+\begin{frame}{NBeats Model}
+
+    \vspace{0.3cm}
+
+    \begin{itemize}
+        \item The model \textcite{nbeats} aims to solve the vanishing gradient of RNNs by \textbf{stacking blocks of MLPs}
+        \item The distinct feature of this model is that at each point it forecasts (future) and \textbf{backcasts (past values)}, attempting to reconstruct the time series
+        \item It tries to \textbf{repeat the idea of CNNs} - each block is aimed to learn some specific pattern of the time series independently
+        \item Why is it useful? It \textbf{allows for pre-specified horizon for prediction instead of recursive updates}
+        \item We train the model on the same set of features as all other NNs
+    \end{itemize}
+    
+    \vspace{0.4cm}
+\end{frame}
+
+\begin{frame}{NBeats Architecture}
+\begin{figure}[h]
+    \centering
+    \begin{minipage}{0.69\linewidth}
+        \centering
+        \caption{Source: \textcite{nbeats}}
+        \includegraphics[width=\linewidth]{latex_praesentation/nbeats_architecture.png}
+        \label{fig:nbeats-arch}
+    \end{minipage}
+\end{figure}
+\vspace{-5mm}
+\end{frame}
+
+\begin{frame}{PatchTST Model}
+
+    \vspace{0.3cm}
+
+    \begin{itemize}
+        \item The model \textcite{patchtst} tries to improve the logic of simple Transformer Encoder, treating 'Time Series as sequences of words'
+        \item It \textbf{splits the Time Series into chunks} and weighs by attention weights
+        \item Then the resulting patters are combined for the output
+        \item Why is it useful? It generalizes our Transformer architecture
+    \end{itemize}
+    
+    \vspace{0.4cm}
+\end{frame}
+
+\begin{frame}{PatchTST Architecture}
+\begin{figure}[h]
+    \centering
+    \begin{minipage}{0.69\linewidth}
+        \centering
+        \caption{Source: \textcite{nbeats}}
+        \includegraphics[width=\linewidth]{latex_praesentation/main_patchtst.png}
+        \label{fig:patchtst-main}
+    \end{minipage}
+\end{figure}
+\vspace{-5mm}
+\end{frame}
+
+\begin{frame}{Preliminary NN Results}
+
+\begin{table}[htbp]
+  \centering
+  \caption{RMSE Results. \newline \small \textit{2018-09-15 to 2018-09-30}}
+  \begin{tabular}{||c|c|c||c|c||}
+    \hline
+    \multicolumn{1}{||c|}{} & \multicolumn{2}{c||}{1 Split} & \multicolumn{2}{c||}{Rolling} \\
+    \cline{2-5}
+    Model & Mean & Std & Mean & Std \\
+    \hline
+    Hist. Vol & 0.0 & 0.0 & 0.0 & 0.0 \\
+    MLP & 0.0 & 0.0 & 0.0 & 0.0 \\
+    LSTM & 0.0 & 0.0 & 0.0 & 0.0 \\
+    $\sigma$-LSTM & 0.0 & 0.0 & 0.0 & 0.0 \\
+    NBeats & 0.0 & 0.0 & 0.0 & 0.0 \\
+    PatchTST & 0.0 & 0.0 & 0.0 & 0.0 \\
+    \hline
+  \end{tabular}
+  \label{tab:your_label}
+\end{table}
+
+\end{frame}
+
+\section{Temporal mixture models}
+
+\begin{frame}
+    \frametitle{Idea behind mixture models}
+    
+    \textbf{Goal:} Improve short-term volatility predictions by dynamically combining insights from historical volatility and order-book data.
+
+    \vspace{0.3cm}
+    \textbf{Motivation:}
+    \begin{itemize}
+        \item Volatility exhibits auto-regressive patterns (e.g., clustering).
+        \item Order-book captures fine-grained market sentiment and trading intention.
+        \item Their relative influence can shift over time.
+    \end{itemize}
+    
+    \vspace{0.4cm}
+    \textbf{Modeling Insight:}
+    \begin{itemize}
+        \item Use two specialized models:
+        \begin{itemize}
+            \item \textbf{Auto-regressive component:} captures temporal trends in volatility.
+            \item \textbf{Order-book component:} models market microstructure dynamics.
+        \end{itemize}
+        \item A \textbf{gate function} learns to weigh each component dynamically.
+    \end{itemize}
+    
+    \vspace{0.4cm}
+\end{frame}
+
+\begin{frame}
+\frametitle{Idea behind mixture models}
+\begin{center}
+\scalebox{0.7}{
+\begin{tikzpicture}[
+  node distance=1.5cm and 2cm,
+  every node/.style={font=\small},
+  myarrow/.style={->, thick},
+  box/.style={draw, rectangle, minimum height=1.2cm, minimum width=2.8cm}
+]
+
+% Input nodes
+\node (volhist) [box, fill=blue!10] {Volatility History};
+\node (orderbook) [box, fill=red!10, below=of volhist] {Order Book Features};
+
+% Gate centered between input and model layers
+\node (gate) [draw, circle, fill=gray!15, right=3.5cm of orderbook, yshift=1.2cm] {Gate};
+
+% AR/OB model nodes
+\node (arcomp) [box, fill=blue!20, above right=1.2cm and 1.8cm of gate] {AR component};
+\node (obcomp) [box, fill=red!20, below right=1.2cm and 1.8cm of gate] {OB component};
+
+% Output node
+\node (combine) [box, fill=green!20, right=of gate, xshift=5cm] {$\hat{v}_t = g_t^{AR} \mu_t^{AR} + g_t^{OB} \mu_t^{OB}$};
+
+% Connections from inputs to gate
+\draw[myarrow] (volhist.east) -- ++(1.2, 0) |- (gate.north);
+\draw[myarrow] (orderbook.east) -- ++(1.2, 0) |- (gate.south);
+
+% Connections from inputs to model components
+\draw[myarrow] (volhist) -- (arcomp);
+\draw[myarrow] (orderbook) -- (obcomp);
+
+% Connections to output
+\draw[myarrow] (arcomp) -- (combine);
+\draw[myarrow] (obcomp) -- (combine);
+\draw[myarrow] (gate) -- (combine);
+
+\end{tikzpicture}
+}
+\end{center}
+\end{frame}
+
+
+\begin{frame}
+    \frametitle{Mixture models - theory}
+    \textbf{Goal:} Estimate short-term volatility as a probabilistic mixture of two components:
+    \begin{itemize}
+      \item Auto-regressive (AR) component: uses past volatility
+      \item Order-book (OB) component: uses order flow features
+    \end{itemize}
+    
+    \vspace{0.2cm}
+    \textbf{Key Elements:}
+    \begin{itemize}
+      \item Gating function determines weights $g_t = (g_t^{AR}, g_t^{OB})$
+      \item Each component predicts a distribution: $D^{AR}_t$, $D^{OB}_t$ 
+    \end{itemize}
+    \vspace{0.3cm}
+    \textbf{Gates:}
+    \[
+    g_t^{\mathrm{AR}}
+    = \frac{
+      \exp\!\bigl(\frac{\alpha^\top \mathbf v_{t-p:t-1}}{\tau}\bigr)
+    }{
+      \exp\!\bigl(\frac{\alpha^\top \mathbf v_{t-p:t-1}}{\tau}\bigr)
+      +
+      \exp\!\bigl(\frac{s(A_g,B_g,X_t,b_g)}{\tau}\bigr)
+    }
+    \]
+    \vspace{0.3cm}
+    \textbf{Mixture Prediction:}
+    \[
+    p(v_t | v_{t-p:t-1}, X_t) = g_t^{AR} \cdot f^{AR}_t(v_t) + g_t^{OB} \cdot f^{OB}_t(v_t)
+    \]
+    \[
+    \mathbb{E}[v_t |  v_{t-p:t-1}, X_t] = g_t^{AR} \mu_t^{AR} + g_t^{OB} \mu_t^{OB}
+    \]
+    
+    
+    
+\end{frame}
+
+
+\begin{frame}
+    \frametitle{Types of mixtures}
+    \textbf{Implemented Variants of Temporal Mixture Models:}
+
+    \vspace{0.4cm}
+    
+    \textbf{\textcolor{blue}{\faCheckCircle~ Models from original paper (Baseline):}}
+    \begin{itemize}
+      \item \textbf{TM-N} \hfill \textit{(Normal distribution for both components)}
+      \item \textbf{TM-H} \hfill \textit{(Normal + hinge penalty for negative means)}
+      \item \textbf{TM-LN} \hfill \textit{(Log-Normal distribution for both components)}
+    \end{itemize}
+    
+    \vspace{0.3cm}
+    \textbf{\textcolor{orange}{\faFlask~ Additional models (Paper extension):}}
+    \begin{itemize}
+      \item \textbf{TM-IG} \hfill \textit{(Inverse-Gaussian for both components)}
+      \item \textbf{TM-W} \hfill \textit{(Weibull distribution for both components)}
+      \item \textbf{TM-HN-W} \hfill \textit{(Normal AR + Weibull OB)}
+      \item \textbf{TM-HN-IG} \hfill \textit{(Normal AR + Inverse-Gaussian OB)}
+    \end{itemize}
+    
+\end{frame}
+\begin{frame}
+\frametitle{TM-N: Normal Component Model}
+
+\textbf{What is TM-N?}
+\begin{itemize}
+  \item Assumes \textbf{normal distributions} for both AR and OB components.
+  \item Final prediction is a \textbf{mixture of means} weighted by a learned gate.
+\end{itemize}
+
+\vspace{0.3cm}
+
+
+\vspace{0.2cm}
+\textbf{Key formulas:}
+\begin{itemize}
+  \item $\mu_t^{AR} = \phi^\top v_{t-p:t-1}$ \hfill \textit{(AR mean)}
+  \item $\sigma_t^{AR} = \exp\left(\tfrac{1}{2} \gamma^\top v_{t-p:t-1}\right)$ (we estimate log-vol due to additivity)
+  \item $\mu_t^{OB} = s(A_\mu, B_\mu, X_t, b_\mu)$ \hfill \textit{(bilinear mean)}
+  \item $\sigma_t^{OB} = \exp\left(\tfrac{1}{2} s(A_\sigma, B_\sigma, X_t, b_\sigma)\right)$
+\end{itemize}
+
+\vspace{0.2cm}
+\textbf{Loss function:}
+\[
+\mathcal{O}_{\text{TM-N}} = -\mathcal{L}_{\text{TM-N}}  + \lambda_2 \|\theta\|_2^2
+\]
+
+\vspace{0.2cm}
+\textbf{Remarks:}
+\begin{itemize}
+  \item \textcolor{green!50!black}{\textbf{+}} Simple and interpretable baseline
+  \item \textcolor{red}{\textbf{--}} Risk of negative predictions without penalty
+\end{itemize}
+
+\end{frame}
+\begin{frame}
+\frametitle{TM-H: Hinge-Normal Component Model}
+
+\vspace{0.2cm}
+\textbf{Hinge modification:}
+\[
+\mathcal{O}_{\text{hinge}} = \mathcal{O}_{\text{TM-N}} + \beta \cdot \left[ \delta - \mu_t^{AR} \right]_+
+\]
+
+\vspace{0.2cm}
+\textbf{Remarks:}
+\begin{itemize}
+  \item \textcolor{green!50!black}{\textbf{+}} Penalizes negative mean predictions from AR component
+  \item \textcolor{green!50!black}{\textbf{+}} Simple, effective fix without changing the distribution
+  \item \textcolor{red}{\textbf{--}} Still lacks natural support for strictly positive values
+\end{itemize}
+
+\end{frame}
+\begin{frame}
+\frametitle{TM-LN: Log-Normal Component Model}
+
+\textbf{What is TM-LN?}
+\begin{itemize}
+  \item Assumes that both AR and OB components follow \textbf{log-normal distributions}.
+  \item Naturally ensures that predicted volatility values are \textbf{non-negative}.
+  \item Prediction is made in log-space and exponentiated back to original scale.
+\end{itemize}
+
+\vspace{0.2cm}
+\textbf{Key formulas:}
+\begin{itemize}
+  \item Let $\ell_t = \log v_t$
+  \item $\ell_t^{AR} \sim \mathcal{N}(\mu_t^{AR}, (\sigma_t^{AR})^2)$
+  \item $\ell_t^{OB} \sim \mathcal{N}(\mu_t^{OB}, (\sigma_t^{OB})^2)$
+  \item AR component parameters:
+  \begin{itemize}
+    \item $\mu_t^{AR} = \phi^\top v_{t-p:t-1}$
+    \item $\sigma_t^{AR} = \exp\left( \frac{1}{2} \gamma^\top v_{t-p:t-1} \right)$
+  \end{itemize}
+  \item OB component parameters (bilinear):
+  \begin{itemize}
+    \item $\mu_t^{OB} = s(A_\mu, B_\mu, X_t, b_\mu)$
+    \item $\sigma_t^{OB} = \exp\left( \frac{1}{2} s(A_\sigma, B_\sigma, X_t, b_\sigma) \right)$
+  \end{itemize}
+  \item Final prediction: $\hat{v}_t = g_t^{AR} \cdot \exp(\mu_t^{AR}+\frac{(\sigma_t^{AR})^2}{2}) + g_t^{OB} \cdot \exp(\mu_t^{OB}+\frac{(\sigma_t^{OB})^2}{2})$
+
+\end{itemize}
+\end{frame}
+\begin{frame}
+\frametitle{TM-LN: Log-Normal Component Model}
+\textbf{Loss function:}
+\[
+\mathcal{O}_\text{TM-LN} = -\mathcal{L}_\text{TM-LN}  + \lambda_2 \|\theta\|_2^2
+\]
+
+\vspace{0.2cm}
+\textbf{Remarks:}
+\begin{itemize}
+  \item \textcolor{green!50!black}{\textbf{+}} Guarantees positive predictions without penalties
+  \item \textcolor{green!50!black}{\textbf{+}} Better aligned with volatility's distributional properties
+  \item \textcolor{green!50!black}{\textbf{+}} Good in predicting heavy-tailed behaviours
+  \item \textcolor{red!50!black}{\textbf{--}} Difficulties predicting low volatility periods due to density approaching $0$ in $(0,\varepsilon)$
+  \item \textcolor{red}{\textbf{--}} Slightly more complex likelihood computation
+\end{itemize}
+\end{frame}
+\begin{frame}
+\frametitle{What do we get?}
+    \begin{center}
+    \begin{tabular}{cc}
+      \includegraphics[width=0.45\textwidth]{hinge.png} &
+      \includegraphics[width=0.45\textwidth]{lognormal.png} \\
+      \textbf{Hinge predictions} & \textbf{Log-normal predictions} \\
+      \includegraphics[width=0.45\textwidth]{hingeweights.png} &
+      \includegraphics[width=0.45\textwidth]{logweights.png} \\
+      \textbf{Hinge gate values} & \textbf{Log-normal gate values}
+    \end{tabular}
+    \end{center}
+\end{frame}
+\begin{frame}
+\frametitle{What more could we do?}
+\begin{itemize}
+    \item Stay on the positive support of the distribution
+    \item Model heavy tails and non zero density in the neighborhood of $0$
+    \item Capture more complex behaviors of volatility
+    \item Ensure the model has enough flexibility to model non standard distributions 
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{TM-W: Weibull Component Model}
+
+\textbf{What is TM-W?}
+\begin{itemize}
+  \item Assumes both AR and OB components follow \textbf{Weibull distributions}.
+  \item Captures asymmetric and heavy-tailed behavior in volatility.
+\end{itemize}
+
+\vspace{0.2cm}
+\textbf{Key formulas:}
+\begin{itemize}
+  \item Weibull density: $f(v; k, \lambda) = \frac{k}{\lambda} \left( \frac{v}{\lambda} \right)^{k - 1} \exp\left[ -\left( \frac{v}{\lambda} \right)^k \right]$
+  \item AR parameters:
+  \begin{itemize}
+    \item $k_t^{AR} = \text{softplus}(W_k^{AR} \cdot \text{ReLU}(W_0^{AR} v_{t-p:t-1} + b_0) + b_k)$
+    \item $\lambda_t^{AR} = \text{softplus}(W_\lambda^{AR} \cdot \text{ReLU}(W_0^{AR} v_{t-p:t-1} + b_0) + b_\lambda)$
+  \end{itemize}
+  \item OB parameters:
+  \begin{itemize}
+    \item $k_t^{OB} = \text{softplus}(W_k^{OB} \cdot \text{ReLU}(W_0^{OB} \hat{X}_t + b_0) + b_k)$
+    \item $\lambda_t^{OB} = \text{softplus}(W_\lambda^{OB} \cdot \text{ReLU}(W_0^{OB} \hat{X}_t + b_0) + b_\lambda)$
+  \end{itemize}
+  \item Final prediction: $\hat{v}_t = g_t^{AR} \cdot \lambda_t^{AR} \cdot \Gamma\left(1 + \frac{1}{k_t^{AR}}\right) + g_t^{OB} \cdot \lambda_t^{OB} \cdot \Gamma\left(1 + \frac{1}{k_t^{OB}}\right)$
+\end{itemize}
+
+\end{frame}
+\begin{frame}
+\frametitle{TM-W: Weibull Component Model}
+\textbf{Loss function:}
+\[
+\mathcal{O}_\text{TM-W} = -\mathcal{L}_\text{TM-W}  + \lambda_2 \|\theta\|_2^2
+\]
+\vspace{0.2cm}
+\textbf{Remarks:}
+\begin{itemize}
+  \item \textcolor{green!50!black}{\textbf{+}} Flexible for modeling skewed and heavy-tailed distributions
+  \item \textcolor{green!50!black}{\textbf{+}} All parameters constrained to be positive
+  \item \textcolor{green!50!black}{\textbf{+}} Dynamics of distribution fit volatility dynamics
+  \item \textcolor{red}{\textbf{--}} Harder to interpret and calibrate than Normal-based models
+  \item \textcolor{red}{\textbf{--}} Numerically unstable during training
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{TM-IG: Inverse-Gaussian Component Model}
+
+\textbf{What is TM-IG?}
+\begin{itemize}
+  \item Assumes both AR and OB components follow \textbf{Inverse-Gaussian distributions}.
+  \item Designed to model positively skewed, heavy-tailed volatility behavior.
+\end{itemize}
+
+\vspace{0.2cm}
+\textbf{Key formulas:}
+\begin{itemize}
+  \item IG density: $f(v; \mu, \lambda) = \sqrt{\frac{\lambda}{2\pi v^3}} \exp\left( -\frac{\lambda (v - \mu)^2}{2\mu^2 v} \right)$
+  \item AR parameters:
+  \begin{itemize}
+    \item $\mu_t^{AR} = \phi^\top v_{t-p:t-1}$ \hfill \textit{(AR mean)}
+    \item $\lambda_t^{AR} = \text{softplus}(W_\lambda^{AR} \cdot \text{ReLU}(W_0 v_{t-p:t-1} + b_0) + b_\lambda)$
+  \end{itemize}
+  \item OB parameters:
+  \begin{itemize}
+    \item $\mu_t^{OB} = s(A_\mu, B_\mu, X_t, b_\mu)$ \hfill \textit{(bilinear mean)}
+    \item $\lambda_t^{OB} = \text{softplus}(W_\lambda^{OB} \cdot \text{ReLU}(W_0 \hat{X}_t) + b_\lambda)$
+  \end{itemize}
+  \item Final prediction: $\hat{v}_t = g_t^{AR} \cdot \mu_t^{AR} + g_t^{OB} \cdot \mu_t^{OB}$
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{TM-IG: Inverse-Gaussian Component Model}
+\textbf{Loss function:}
+\[
+\mathcal{O}_\text{TM-IG} = -\mathcal{L}_\text{TM-IG}  + \lambda_2 \|\theta\|_2^2
+\]
+
+\vspace{0.2cm}
+\textbf{Remarks:}
+\begin{itemize}
+  \item \textcolor{green!50!black}{\textbf{+}} Good fit for volatility spikes and heavy-tails
+  \item \textcolor{green!50!black}{\textbf{+}} Parameters are naturally non-negative
+  \item \textcolor{green!50!black}{\textbf{+}} Can adapt to local variance asymmetry
+  \item \textcolor{red}{\textbf{--}} More numerically sensitive than Gaussian/log-normal
+  \item \textcolor{red}{\textbf{--}} More complex loss gradients during training
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Results and issues}
+    \begin{center}
+    \begin{tabular}{cc}
+      \includegraphics[width=0.45\textwidth]{invgaus.png} &
+      \includegraphics[width=0.45\textwidth]{weibul.png} \\
+      \textbf{Inverse-Gaussian predictions} & \textbf{Weibull predictions} \\
+      \includegraphics[width=0.45\textwidth]{invgausweights.png} &
+      \includegraphics[width=0.45\textwidth]{weibullweights.png} \\
+      \textbf{IG gate values} & \textbf{Weibull gate values}
+    \end{tabular}
+    \end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{Mixed Models: TM-HN-W and TM-HN-IG}
+
+\textbf{What are TM-HN-W and TM-HN-IG?}
+\begin{itemize}
+  \item \textbf{AR:} Normal distribution with hinge penalty to discourage negative means.
+  \item \textbf{OB:}
+    \begin{itemize}
+      \item TM-HN-W: \textbf{Weibull} distribution
+      \item TM-HN-IG: \textbf{Inverse-Gaussian} distribution
+    \end{itemize} 
+\end{itemize}
+\begin{minipage}{\textwidth}
+\begin{scriptsize}
+\textbf{Parameter estimation (shared structure):}
+\begin{itemize}
+  \item \textbf{AR (Normal with hinge):}
+  \begin{itemize}
+    \item $\mu_t^{AR} = \phi^\top v_{t-p:t-1}$ \hfill \textit{(AR mean)}
+    \item $\sigma_t^{AR} = \text{softplus}(W_\sigma^{AR} \cdot \text{ReLU}(W_0 v_{t-p:t-1} + b_0) + b_\sigma)$
+  \end{itemize}
+  \item \textbf{OB (Weibull or IG):}
+     Parameters are estimated using simple neural network  $\text{softplus}(W_{\theta} \cdot \text{ReLU}(W_0 \hat{X}_t + b_0) + b_\theta)$
+
+\end{itemize}
+\end{scriptsize}
+\end{minipage}
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Mixed Models: TM-HN-W and TM-HN-IG}
+\textbf{Loss function (shared structure for both models):}
+\[
+\mathcal{O}_\text{Mixed} = -\mathcal{L}_\text{mix}  + \lambda_2 \|\theta\|_2^2 + \beta \left[\delta - \mu_t^{AR} \right]_+
+\]
+
+\vspace{0.3cm}
+\textbf{Remarks:}
+\begin{itemize}
+  \item \textcolor{green!50!black}{\textbf{+}} AR hinge penalty adds control over negative forecasts
+  \item \textcolor{green!50!black}{\textbf{+}} OB component is flexible (Weibull or IG) to model volatility spikes
+  \item \textcolor{green!50!black}{\textbf{+}} IG can model more peaked asymmetry; Weibull better for heavy tails
+  \item \textcolor{red}{\textbf{--}} Mixed distributions make optimization more sensitive
+  \item \textcolor{red}{\textbf{--}} More tuning required for stable training
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Mixed models results}
+    \begin{center}
+    \begin{tabular}{cc}
+      \includegraphics[width=0.45\textwidth]{hinginv.png} &
+      \includegraphics[width=0.45\textwidth]{hingeweib.png} \\
+      \textbf{TM-HN-IG predictions} & \textbf{TM-HN-W predictions} \\
+      \includegraphics[width=0.45\textwidth]{hingeinvweights.png} &
+      \includegraphics[width=0.45\textwidth]{hingeweibweights.png} \\
+      \textbf{Gate values (IG)} & \textbf{Gate values (Weibull)}
+    \end{tabular}
+    \end{center}
+\end{frame}
+
+\section{Benchmark models}
+
+\section{Results}
+\begin{frame}
+    \frametitle{Results - weekly rolling}
+\renewcommand{\arraystretch}{1.3}
+\begin{center}
+\footnotesize
+\begin{tabular}{lcc|cc}
+\toprule
+\textbf{Models} & \multicolumn{2}{c|}{\textbf{RMSE}} & \multicolumn{2}{c}{\textbf{MAE}} \\
+               & Mean & Stddev & Mean & Stddev \\
+\midrule
+TM-N   & 0.15042 & 0.110 & 0.07821 & 0.040 \\
+TM-H   & 0.16031 & 0.120 & 0.08917 & 0.050 \\
+TM-LN  & 0.27680 & 0.351 & 0.11890 & 0.057 \\
+TM-IG  & 0.15020 & 0.110 & 0.09100 & 0.040 \\
+TM-W   & 0.15100 & 0.120 & 0.09100 & 0.040 \\
+TM-H-W  & 0.15100 & 0.110 & 0.08900 & 0.040 \\
+TM-H-IG & 0.16000 & 0.120 & 0.09000 & 0.040 \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.3cm}
+\textit{All values multiplied by \( 10^{-3} \)}
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+    \frametitle{Results - weekly incremental}
+    \renewcommand{\arraystretch}{1.3}
+\begin{center}
+\footnotesize
+\begin{tabular}{lcc|cc}
+\toprule
+\textbf{Models} & \multicolumn{2}{c|}{\textbf{RMSE}} & \multicolumn{2}{c}{\textbf{MAE}} \\
+               & Mean & Stddev & Mean & Stddev \\
+\midrule
+TM-N  & 0.14960 & 0.093 & 0.09860 & 0.028 \\
+TM-H  & 0.15344 & 0.094 & 0.08629 & 0.030 \\
+TM-LN & 0.23297 & 0.636 & 0.10162 & 0.071 \\ % outlier at index 7 removed from calc
+TM-IG & 0.15380 & 0.090 & 0.08064 & 0.026 \\
+TM-W  & 0.15200 & 0.092 & 0.08965 & 0.032 \\
+TM-H-W & 0.14990 & 0.091 & 0.08712 & 0.029 \\
+TM-H-IG & 0.14990 & 0.091 & 0.08922 & 0.029 \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.3cm}
+\textit{All values multiplied by \( 10^{-3} \)}
+\end{center}
+\end{frame}
+\begin{frame}
+    \frametitle{Results - MAE - weekly incremental}
+
+
+    \begin{table}[]
+\caption{}
+\label{tab:non-conformal-sim-res}
+\begin{tabular}{l|ll|ll}
+                           & \multicolumn{2}{c|}{RMSE} & \multicolumn{2}{c}{MSE} \\ \hline
+Models                     & Mean        & Stddev      & Mean       & Stddev     \\ \hline
+\multicolumn{1}{|l|}{TM 1} & 0.522       & 0.616       & 18.84      & 20         \\
+\multicolumn{1}{|l|}{TM 2} & 0.548       & 0.629       & 17.28      & 21.14      \\
+\multicolumn{1}{|l|}{TM 1} & 0.579       & 0.643       & 14.1       & 16.53      \\
+\multicolumn{1}{|l|}{TM 2} & 0.642       & 0.686       & 8.63       & 9.57       \\
+\multicolumn{1}{|l|}{TM 1} & 0.676       & 0.703       & 6.02       & 6.73       \\
+\multicolumn{1}{|l|}{TM 2} & 0.728       & 0.732       & 2.5        & 3.17       \\ \hline
+\end{tabular}
+\end{table}
+\end{frame}
+\begin{frame}
+\frametitle{Appendix}
+Rolling
+\tiny
+\begin{center}
+\begin{tabularx}{\textwidth}{l*{10}{>{\centering\arraybackslash}X}}
+\toprule
+\textbf{MAE} & 0 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 \\
+\midrule
+TM-N   & .000053 & .0001 & .000061 & .000068 & .000141 & .000124 & .000051 & .00019 & .000029 & .000052 \\
+TM-H   & .000052 & .000092 & .000059 & .000071 & .000135 & .000151 & .000082 & .000231 & .000059 & .000078 \\
+TM-LN  & .0001 & 105610.17 & .000081 & .000084 & .000154 & .000254 & .000095 & 7.770351 & .000083 & .00009 \\
+TM-IG  & .000062 & .000112 & .000079 & .000091 & .000154 & .000152 & .000091 & .000172 & .000057 & .000084 \\
+TM-W   & .000071 & .000115 & .000083 & .000068 & .000138 & .00015 & .000076 & .000172 & .000043 & .000086 \\
+TM-HW  & .000067 & .000121 & .000085 & .000081 & .000122 & .000134 & .000083 & .000165 & .000043 & .000065 \\
+TM-HIG & .000071 & .000113 & .00009  & .000092 & .000126 & .000147 & .000065 & .000162 & .000052 & .000073 \\
+\midrule
+\textbf{best} & TM-H & TM-H & TM-H & TM-H & TM-N & TM-IG & TM-N & TM-HIG & TM-N & TM-N \\
+\midrule
+\textbf{RMSE} & 0 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 \\
+\midrule
+TM-N   & .000081 & .000165 & .000107 & .000107 & .00024 & .000426 & .000122 & .000052 & .000053 & .000105 \\
+TM-H   & .000081 & .000155 & .000104 & .000123 & .000236 & .000443 & .000132 & .000542 & .00007  & .000153 \\
+TM-LN  & .000096 & 10707150.55 & .000115 & .000122 & .000242 & .001207 & .000151 & 7.849853 & .000093 & .00018 \\
+TM-IG  & .000084 & .000138 & .000112 & .000124 & .00025 & .000429 & .000131 & .000511 & .000077 & .000153 \\
+TM-W   & .00011  & .000202 & .000138 & .000144 & .000241 & .000431 & .000139 & .000516 & .000073 & .00015 \\
+TM-HW  & .000098 & .000189 & .00014  & .000137 & .000226 & .000434 & .000128 & .000498 & .000085 & .000153 \\
+TM-HIG & .000107 & .000177 & .000157 & .000148 & .000249 & .000437 & .000127 & .000519 & .000087 & .000157 \\
+\midrule
+\textbf{best} & TM-H & TM-H & TM-H & TM-H & TM-N & TM-IG & TM-N & TM-HW & TM-N & TM-N \\
+\bottomrule
+\end{tabularx}
+\end{center}
+\end{frame}
+\begin{frame}
+    \frametitle{Appendix}
+    \tiny
+\begin{center}
+\begin{tabularx}{\textwidth}{l*{10}{>{\centering\arraybackslash}X}}
+\toprule
+\textbf{MAE} & 0 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 \\
+\midrule
+TM-N   & .000054 & .000098 & .000065 & .000075 & .000139 & .000126 & .000053 & .000196 & .000035 & .000056 \\
+TM-H   & .000055 & .000105 & .000084 & .000073 & .000127 & .000134 & .00005 & .000184 & .000032 & .000055 \\
+TM-LN  & .00009  & .000326 & .000088 & .000082 & .000264 & .000186 & .000074 & 18936752.439128 & .000049 & .00006 \\
+TM-IG  & .000075 & .0001   & .000074 & .000088 & .000137 & .000142 & .00007 & .000096 & .000044 & .000083 \\
+TM-W   & .000062 & .014216 & .000083 & .000064 & .000125 & .000144 & .000068 & .000183 & .00005 & .000086 \\
+TM-HW  & .000072 & .000114 & .000083 & .000074 & .000118 & .000134 & .000049 & .000165 & .000045 & .000059 \\
+TM-HIG & .000071 & .000122 & .000091 & .000081 & .000113 & .000148 & .00008 & .000174 & .000053 & .000078 \\
+\midrule
+\textbf{best} & TM-N & TM-N & TM-H & TM-H & TM-IG & TM-IG & TM-N & TM-HW & TM-W & TM-H \\
+\midrule
+\textbf{RMSE} & 0 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 \\
+\midrule
+TM-N   & .000081 & .000164 & .000107 & .000106 & .000231 & .000429 & .000124 & .00009 & .000056 & .000148 \\
+TM-H   & .000083 & .000169 & .000105 & .000109 & .000236 & .000431 & .000124 & .000073 & .000065 & .000144 \\
+TM-LN  & .000078 & .0003   & .000108 & .000122 & .000244 & .000518 & .000125 & 193107507.326725 & .000067 & .000137 \\
+TM-IG  & .000092 & .00017  & .000106 & .000125 & .000261 & .000456 & .000129 & .000087 & .000061 & .000153 \\
+TM-W   & .00013  & .141258 & .000124 & .000143 & .00025 & .000444 & .000125 & .000084 & .000086 & .000149 \\
+TM-HW  & .000095 & .000181 & .000128 & .000122 & .000242 & .000428 & .000122 & .000065 & .000059 & .000145 \\
+TM-HIG & .000106 & .000188 & .000133 & .00014 & .000231 & .000424 & .000143 & .000523 & .000078 & .000175 \\
+\midrule
+\textbf{best} & TM-N & TM-N & TM-H & TM-H & TM-IG & TM-IG & TM-N & TM-HW & TM-W & TM-H \\
+\bottomrule
+\end{tabularx}
+\end{center}
+\end{frame}
+
+\section{Appendix}
+
+\begin{frame}{Full PatchTST Architecture}
+\begin{figure}[h]
+    \centering
+    \begin{minipage}{0.69\linewidth}
+        \centering
+        \caption{Source: \textcite{nbeats}}
+        \includegraphics[width=\linewidth]{latex_praesentation/full_patchtst.png}
+        \label{fig:patchtst-full}
+    \end{minipage}
+\end{figure}
+\vspace{-5mm}
+\end{frame}
+
+\end{document}
