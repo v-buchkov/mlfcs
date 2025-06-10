@@ -109,11 +109,9 @@ class AbstractMixturePredictor(AbstractPredictor, ABC):
             return torch.distributions.Normal(loc=prior_mu, scale=prior_sigma)
 
         elif dist_type == "lognormal":
-            prior_loc = torch.distributions.Normal(loc=roll_mean,
-                                                   scale=torch.ones_like(roll_mean))
-            prior_scale = torch.distributions.LogNormal(-1.0, 0.5)
-            return torch.distributions.LogNormal(loc=prior_loc.loc,
-                                                 scale=prior_scale.sample())
+            loc = roll_mean
+            scale = torch.ones_like(roll_mean)
+            return torch.distributions.LogNormal(loc=loc, scale=scale)
 
         elif dist_type == "weibull":
             shape = torch.distributions.Gamma(1.5, 1.0).sample((B,)).to(device)
@@ -229,7 +227,7 @@ class TM_N_Predictor(AbstractMixturePredictor):
 
         # ---------- AR component ----------
         self.ar_mean_lin = nn.Linear(ar_order, 1)   # mu
-        self.ar_logvar_lin = nn.Linear(ar_order, 1)   # log(σ²)
+        self.ar_logvar_lin = nn.Linear(ar_order, 1)   # log(sigma^2)
 
         # ---------- Feature component (bilinear) ----------
         # Mean
@@ -241,7 +239,7 @@ class TM_N_Predictor(AbstractMixturePredictor):
         self.A_logvar = nn.Parameter(0.001 * torch.randn(n))
         self.B_logvar = nn.Parameter(0.001 * torch.randn(lb))
         self.bias_logvar = nn.Parameter(torch.zeros(1))
-        
+
         self.ar_prior_type = "normal"
         self.feat_prior_type = "normal"
         self.ar_param_key = "mean"
@@ -354,17 +352,11 @@ class TM_LN_Predictor(AbstractMixturePredictor):
             "sigma": sigma
         }
 
-    def compute_feat_params_bi(self, features):
-        def bilinear_scalar(A, B, X, bias):
-            tmp = X * A.view(1, self.n, 1)
-            tmp_sumF = tmp.sum(dim=1)
-            tmp2 = tmp_sumF * B.view(1, self.lb)
-            return tmp2.sum(dim=1) + bias
-
-        mean_logvol = bilinear_scalar(
+    def compute_feat_params(self, features):
+        mean_logvol = self.bilinear_scalar(
             self.A_mean, self.B_mean, features, self.bias_mean).clamp(-5.0, 5.0)
 
-        logvar = bilinear_scalar(
+        logvar = self.bilinear_scalar(
             self.A_logvar, self.B_logvar, features, self.bias_logvar)
         # Keeps sigma in reasonable range
         logvar = torch.clamp(logvar, min=-20, max=20)
@@ -375,7 +367,7 @@ class TM_LN_Predictor(AbstractMixturePredictor):
             "sigma": sigma
         }
 
-    def compute_feat_params(self, features):
+    def compute_feat_params_dyn(self, features):
         B = features.shape[0]
         x = features.view(B, -1)
         mu = self.feat_mlp_mu(x).squeeze(-1)
@@ -463,8 +455,10 @@ class TM_IG_Predictor(AbstractMixturePredictor):
 
         # ---------- AR side ----------
         self.ar_mean_lin = nn.Linear(ar_order, 1)        # mu_ar
-        self.ar_lambda_lin = nn.Linear(
-            ar_order, 1)        # lambda_ar (dynamic)
+        self.ar_lambda_lin = nn.Sequential(
+            nn.Linear(ar_order, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1))
 
         # ---------- Feature side ----------
         # mu_feat via bilinear regression
@@ -493,7 +487,7 @@ class TM_IG_Predictor(AbstractMixturePredictor):
             {'mu': [B], 'lam': [B]}
         """
         mu = F.softplus(self.ar_mean_lin(
-            past_volatility).squeeze(-1)) + self.eps
+            past_volatility)).squeeze(-1)
         lam = F.softplus(self.ar_lambda_lin(
             past_volatility).squeeze(-1)) + self.eps
         return {"mean": mu, "lam": lam}
@@ -507,9 +501,8 @@ class TM_IG_Predictor(AbstractMixturePredictor):
             {'mu': [B], 'lam': [B]}
         """
         # mu_feat (bilinear)
-        mu = self.bilinear_scalar(
-            self.A_mean, self.B_mean, features, self.bias_mean)
-        mu = F.softplus(mu) + self.eps
+        mu = F.softplus(self.bilinear_scalar(
+            self.A_mean, self.B_mean, features, self.bias_mean))
 
         # lambda_feat (MLP)
         x_flat = features.view(features.size(0), -1)          # [B, n*lb]
@@ -527,321 +520,233 @@ class TM_IG_Predictor(AbstractMixturePredictor):
 
 class TM_W_Predictor(AbstractMixturePredictor):
     """
-    Temporal mixture model with Weibull components.
-
-    AR component: v ~ Weibull(k_ar, lam_ar)
-    Feature component: v ~ Weibull(k_feat, lam_feat)
-
-    For the AR component, parameters are produced via a small MLP over past_volatility.
-    For the Feature component, parameters are produced via a small MLP over flattened features.
-
-    The component mean for a Weibull distributed variable is:
-      E[v] = lam * Gamma(1 + 1/k)
+    Temporal mixture model with Weibull components using separate networks
+    for shape (k) and scale (lam) estimation.
     """
 
     def __init__(self, ar_order: int, n: int, lb: int, eps: float = 1e-6):
         super().__init__(ar_order, n, lb)
         self.eps = eps
 
-        # AR net: outputs raw estimates for k and lam
-        self.ar_net = nn.Sequential(
+        # AR networks: separate MLPs for k_ar and lam_ar
+        self.ar_k_net = nn.Sequential(
             nn.Linear(ar_order, 32),
             nn.ReLU(),
-            nn.Linear(32, 2)  # outputs raw_k and raw_lam
+            nn.Linear(32, 1)
+        )
+        self.ar_lam_net = nn.Sequential(
+            nn.Linear(ar_order, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1)
         )
 
-        # Feature net: MLP over flattened features
-        self.feat_net = nn.Sequential(
+        # Feature networks: separate MLPs for k_feat and lam_feat
+        self.feat_k_net = nn.Sequential(
             nn.Linear(n * lb, 100),
             nn.ReLU(),
-            nn.Linear(100, 2)  # outputs raw_k and raw_lam
+            nn.Linear(100, 1)
         )
+        self.feat_lam_net = nn.Sequential(
+            nn.Linear(n * lb, 100),
+            nn.ReLU(),
+            nn.Linear(100, 1)
+        )
+
+        # set prior types for KL-divergence
         self.ar_prior_type = "weibull"
         self.feat_prior_type = "weibull"
         self.ar_param_key = "lam"
         self.feat_param_key = "lam"
-        # Gating: we already have self.ar_gate_lin and bilinear gate from the base class
 
     def compute_ar_params(self, past_volatility: torch.Tensor) -> dict:
-        raw = self.ar_net(past_volatility)  # shape [B, 2]
-        raw_k, raw_lam = raw.split(1, dim=-1)  # each shape [B,1]
-        k = F.softplus(raw_k) + self.eps
-        lam = F.softplus(raw_lam) + self.eps
-        return {"k": k.squeeze(-1), "lam": lam.squeeze(-1)}
+        # raw outputs for shape and scale
+        raw_k = self.ar_k_net(past_volatility).clamp(-10.0, 10.0)
+        raw_lam = self.ar_lam_net(past_volatility).clamp(-10.0, 10.0)
+
+        # softplus ensures positivity, then clamp to reasonable range
+        k = F.softplus(raw_k).clamp(min=self.eps, max=10.0).squeeze(-1)
+        lam = F.softplus(raw_lam).clamp(min=self.eps, max=10.0).squeeze(-1)
+
+        return {"k": k, "lam": lam}
 
     def compute_feat_params(self, features: torch.Tensor) -> dict:
+        # flatten features
         batch_size = features.size(0)
-        x_flat = features.view(batch_size, -1)  # flatten to [B, n*lb]
-        raw = self.feat_net(x_flat)             # shape [B, 2]
-        raw_k, raw_lam = raw.split(1, dim=-1)
-        k = F.softplus(raw_k) + self.eps
-        lam = F.softplus(raw_lam) + self.eps
-        return {"k": k.squeeze(-1), "lam": lam.squeeze(-1)}
+        x_flat = features.view(batch_size, -1)
+
+        # raw outputs for shape and scale
+        raw_k = self.feat_k_net(x_flat).clamp(-10.0, 10.0)
+        raw_lam = self.feat_lam_net(x_flat).clamp(-10.0, 10.0)
+
+        # softplus ensures positivity, then clamp to reasonable range
+        k = F.softplus(raw_k).clamp(min=self.eps, max=10.0).squeeze(-1)
+        lam = F.softplus(raw_lam).clamp(min=self.eps, max=10.0).squeeze(-1)
+
+        return {"k": k, "lam": lam}
 
     def component_mean(self, params: dict) -> torch.Tensor:
-        # For Weibull: mean = lam * Gamma(1 + 1/k)
+        # E[v] = lam * Gamma(1 + 1/k)
         k = params["k"]
         lam = params["lam"]
-        # Use torch.special.gammaln if available
         inv_k = (1.0 / k).clamp(max=10.0)
         gamma_val = torch.exp(torch.special.gammaln(1.0 + inv_k))
         return lam * gamma_val
 
     def get_distribution(self, params: dict, component: str = "ar"):
-        return Weibull(scale=params["lam"], concentration=params["k"])
-
-
-class TM_W_Predictor_dynamic(AbstractMixturePredictor):
-    """
-    Temporal Mixture – Weibull components (ulepszona wersja).
-
-    * AR-component:  v ~ Weibull(k_ar,  lambda_ar)
-    * Feat-component: v ~ Weibull(k_feat, lambda_feat)
-
-    Ulepszenia:
-    1. Dynamiczne skalowanie parametrów feature-komponentu
-    2. Stabilniejsze obliczanie średniej: clamp, lgamma, unikanie overflow
-    3. Kompatybilność z GenericMixtureNLL: zwracanie torch.distributions.Weibull
-    """
-
-    def __init__(
-        self,
-        ar_order: int,
-        n: int,
-        lb: int,
-        eps: float = 1e-6,
-        k_scale: float = 0.5,
-        invk_max: float = 15.0,
-    ):
-        super().__init__(ar_order, n, lb)
-        self.eps = eps
-        self.k_scale = k_scale
-        self.invk_max = invk_max
-
-        # ------- AR-side MLP -------
-        self.ar_net = nn.Sequential(
-            nn.Linear(ar_order, 32),
-            nn.ReLU(),
-            nn.Linear(32, 2),          # raw_k, raw_lambda
-        )
-
-        # ------- Feature-side MLP -------
-        self.feat_net = nn.Sequential(
-            nn.Linear(n * lb, 100),
-            nn.ReLU(),
-            nn.Linear(100, 2),          # raw_k, raw_lambda
-        )
-        self.ar_prior_type = "normal"
-        self.feat_prior_type = "weibull"
-    # ----- helpers ---------------------------------------------------------
-
-    @staticmethod
-    def _positive(t: torch.Tensor, eps: float) -> torch.Tensor:
-        return F.softplus(t) + eps
-
-    # ----- parametrization -------------------------------------------------
-    def compute_ar_params(self, past_volatility: torch.Tensor) -> dict:
-        raw_k, raw_lam = self.ar_net(past_volatility).split(1, dim=-1)
-        k = self._positive(raw_k, self.eps).squeeze(-1)
-        lam = self._positive(raw_lam, self.eps).squeeze(-1)
-        return {"k": k, "lam": lam}
-
-    def compute_feat_params(self, features_3d: torch.Tensor) -> dict:
-        x_flat = features_3d.view(features_3d.size(0), -1)
-        raw_k, raw_lam = self.feat_net(x_flat).split(1, dim=-1)
-        k = self._positive(raw_k, self.eps).squeeze(-1)
-        lam = self._positive(raw_lam, self.eps).squeeze(-1)
-        return {"k": k, "lam": lam}
-
-    # ----- moment ----------------------------------------------------------
-    def component_mean(self, params: dict) -> torch.Tensor:
-        k = params["k"].clamp(min=self.eps)
-        lam = params["lam"]
-        inv_k = (1.0 / k).clamp(max=self.invk_max)
-        gamma_val = torch.exp(torch.lgamma(1.0 + inv_k))
-        return lam * gamma_val
-
-    # ----- główny forward --------------------------------------------------
-    def forward(
-        self,
-        past_volatility: torch.Tensor,      # [B, ar_order]
-        features_flat: torch.Tensor,        # [B, n*lb]
-        roll_mean
-    ) -> dict:
-        B = features_flat.size(0)
-        features_3d = features_flat.view(B, self.n, self.lb)
-
-        # (1) Component parameters
-        ar_params = self.compute_ar_params(past_volatility)
-        feat_params = self.compute_feat_params(features_3d)
-
-        # (2) Gates
-        gate = self.compute_gating_weights(
-            past_volatility, features_3d)  # [B,2]
-
-        # (3) Dynamic scaling of feature component
-        scale = 1.0 + self.k_scale * gate[:, 1]           # [B]
-        feat_params["k"] = feat_params["k"] * scale
-        feat_params["lam"] = feat_params["lam"] * scale
-
-        # (4) Means
-        ar_mean = self.component_mean(ar_params)
-        feat_mean = self.component_mean(feat_params)
-        mix_mean = gate[:, 0] * ar_mean + gate[:, 1] * feat_mean
-
-        # (5) Distributions for NLL
-        ar_dist = self.get_distribution(ar_params, component="ar")
-        feat_dist = self.get_distribution(feat_params, component="feat")
-
-        return {
-            "ar_params": ar_params,
-            "feat_params": feat_params,
-            "gate_weights": gate,          # [B,2]
-            "ar_mean": ar_mean,            # [B]
-            "feat_mean": feat_mean,        # [B]
-            "mixture_mean": mix_mean,      # [B]
-            "dists": [ar_dist, feat_dist]  # for GenericMixtureNLL
-        }
-
-    # ----- interfejs do GenericMixtureNLL ----------------------------------
-    def get_distribution(self, params: dict, component: str = "ar"):
+        # return a Weibull distribution with separate parameters
         return Weibull(scale=params["lam"], concentration=params["k"])
 
 
 class TM_HN_W_Predictor(AbstractMixturePredictor):
     """
-    Temporal Mixture Predictor:
-      • AR component – Normal(mu, sigma^2) + hinge penalty (mu >= delta)
-      • OB component – Weibull(shape, scale)
-
-    Returns:
-        {
-            'ar_params':   {'mean': mu,      'sigma': sigma},
-            'feat_params': {'shape': k,  'scale': lam},
-            'gate_weights': [B,2],
-            'ar_mean':      mu,
-            'feat_mean':    lam * Gamma(1+1/shape),
-            'mixture_mean': ...
-        }
+    Hinge-Normal + Weibull mixture with separate networks
+    for AR mean, AR sigma, Weibull k, and Weibull lambda.
     """
 
-    def __init__(self, ar_order: int, n: int, lb: int,
-                 eps: float = 1e-6):
+    def __init__(self, ar_order: int, n: int, lb: int, eps: float = 1e-6):
         super().__init__(ar_order, n, lb)
         self.eps = eps
 
-        # AR (Normal)
-        self.ar_mean_lin = nn.Linear(ar_order, 1)
-        self.ar_logvar_lin = nn.Linear(ar_order, 1)
+        # AR mean network
 
-        # OB features (Weibull)
-        self.feat_net = nn.Sequential(
+        self.ar_mean_net = nn.Linear(ar_order, 1)
+
+        # AR sigma network
+        self.ar_sigma_net = nn.Sequential(
+            nn.Linear(ar_order, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1)
+        )
+
+        # Feature k network for Weibull
+        self.feat_k_net = nn.Sequential(
             nn.Linear(n * lb, 100),
             nn.ReLU(),
-            nn.Linear(100, 2)  # raw_shape, raw_scale
+            nn.Linear(100, 1)
         )
+        # Feature lambda network for Weibull
+        self.feat_lam_net = nn.Sequential(
+            nn.Linear(n * lb, 100),
+            nn.ReLU(),
+            nn.Linear(100, 1)
+        )
+
+        # tell the base class which prior to use for each mixture side
         self.ar_prior_type = "normal"
         self.feat_prior_type = "weibull"
-        self.ar_param_key = "mean"
+        # which key holds the scale parameter for KL
+        self.ar_param_key = "sigma"
         self.feat_param_key = "lam"
 
     def compute_ar_params(self, past_volatility: torch.Tensor) -> dict:
-        mu = self.ar_mean_lin(past_volatility).squeeze(-1)
-        log_sigma2 = self.ar_logvar_lin(
-            past_volatility).squeeze(-1).clamp(-10, 10)
-        sigma = torch.exp(0.5 * log_sigma2).clamp(min=1e-4, max=1e2)
-        return {"mean": mu, "sigma": sigma}
+        # clamp raw to avoid extremes
+        raw_mean = self.ar_mean_net(past_volatility).clamp(-10, 10)
+        raw_sigma = self.ar_sigma_net(past_volatility).clamp(-10, 10)
+
+        mean = raw_mean .squeeze(-1).clamp(-10, 10)
+        sigma = F.softplus(raw_sigma).clamp(min=self.eps, max=10).squeeze(-1)
+
+        return {"mean": mean, "sigma": sigma}
 
     def compute_feat_params(self, features: torch.Tensor) -> dict:
-        B = features.size(0)
-        x = features.view(B, -1)
-        raw_shape, raw_scale = self.feat_net(x).split(1, dim=-1)
-        shape = F.softplus(raw_shape).squeeze(-1) + self.eps
-        scale = F.softplus(raw_scale).squeeze(-1) + self.eps
-        return {"k": shape, "lam": scale}
+        x_flat = features.view(features.size(0), -1)
+        raw_k = self.feat_k_net(x_flat).clamp(-10, 10)
+        raw_lam = self.feat_lam_net(x_flat).clamp(-10, 10)
+
+        k = F.softplus(raw_k).clamp(min=self.eps, max=10).squeeze(-1)
+        lam = F.softplus(raw_lam).clamp(min=self.eps, max=10).squeeze(-1)
+
+        return {"k": k, "lam": lam}
 
     def component_mean(self, params: dict) -> torch.Tensor:
-        if "mean" in params:
+        # if this is the AR side, params has 'mean' & 'sigma'
+        if "sigma" in params:
             return params["mean"]
-        shape, scale = params["k"], params["lam"]
-        inv_shape = (1.0 / shape).clamp(max=10.0)
-        gamma_val = torch.exp(torch.lgamma(1.0 + inv_shape))
-        return scale * gamma_val
+        # otherwise it's the Weibull side
+        k = params["k"]
+        lam = params["lam"]
+        inv_k = (1.0 / k).clamp(max=10)
+        gamma_val = torch.exp(torch.special.gammaln(1.0 + inv_k))
+        return lam * gamma_val
 
     def get_distribution(self, params: dict, component: str = "ar"):
         if component == "ar":
-            # Normal component on the AR side
-            return Normal(loc=params["mean"], scale=params["sigma"])
-        else:                                   # "feat"
-            # Weibull component on the order-book side
-            return Weibull(scale=params["lam"], concentration=params["k"])
+            return Normal(loc=params["mean"],
+                          scale=params["sigma"].clamp(min=self.eps))
+        else:
+            return Weibull(scale=params["lam"].clamp(min=self.eps),
+                           concentration=params["k"].clamp(min=self.eps))
 
 
 class TM_HN_IG_Predictor(AbstractMixturePredictor):
     """
-    Temporal Mixture Predictor:
-      • AR component  – Normal(mu, sigma^2)   +  hinge penalty (mu ≥ delta)
-      • OB component  – Inverse Gaussian(mean, lambda_)
-
-    Zwraca:
-        {
-            'ar_params':   {'mean': mu,      'sigma': sigma},
-            'feat_params': {'mean': ig_mean, 'lambda': lambda_},
-            'gate_weights': [B, 2],
-            'ar_mean':        mu,
-            'feat_mean':      ig_mean,                # IG mean = mu
-            'mixture_mean':   ...
-        }
+    Hinge-Normal + Inverse Gaussian mixture with separate networks
+    for AR mean, AR sigma, IG mean, and IG concentration (lambda).
     """
 
-    def __init__(self, ar_order: int, n: int, lb: int,
-                 eps: float = 1e-6):
+    def __init__(self, ar_order: int, n: int, lb: int, eps: float = 1e-6):
         super().__init__(ar_order, n, lb)
         self.eps = eps
 
-        # ---------- AR (Normal) ----------
-        self.ar_mean_lin = nn.Linear(ar_order, 1)
-        self.ar_logvar_lin = nn.Linear(ar_order, 1)
+        # AR mean network
+        self.ar_mean_net = nn.Linear(ar_order, 1)
+        # AR log-variance network
+        self.ar_sigma_net = nn.Sequential(
+            nn.Linear(ar_order, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1)
+        )
 
-        # ---------- OB features (Inverse Gaussian) ----------
-        self.feat_net = nn.Sequential(
+        # Feature mean network for IG
+        self.feat_mean_net = nn.Sequential(
             nn.Linear(n * lb, 100),
             nn.ReLU(),
-            nn.Linear(100, 2)                 # raw_mean, raw_lambda
+            nn.Linear(100, 1)
         )
+        # Feature concentration network for IG
+        self.feat_lambda_net = nn.Sequential(
+            nn.Linear(n * lb, 100),
+            nn.ReLU(),
+            nn.Linear(100, 1)
+        )
+
+        # set prior types for KL-divergence
         self.ar_prior_type = "normal"
         self.feat_prior_type = "invgauss"
         self.ar_param_key = "mean"
         self.feat_param_key = "mean"
-    # ----- AR parameters -----
 
     def compute_ar_params(self, past_volatility: torch.Tensor) -> dict:
-        mu = self.ar_mean_lin(past_volatility).squeeze(-1)
-        log_sigma2 = self.ar_logvar_lin(
-            past_volatility).squeeze(-1).clamp(-10, 10)
-        sigma = torch.exp(0.5 * log_sigma2).clamp(min=1e-4, max=1e2)
-        return {"mean": mu, "sigma": sigma}
+        # clamp raw to avoid extremes
+        raw_mean = self.ar_mean_net(past_volatility).clamp(-10, 10)
+        raw_sigma = self.ar_sigma_net(past_volatility).clamp(-10, 10)
 
-    # ----- OB parameters -----
+        mean = F.softplus(raw_mean).squeeze(-1).clamp(-10, 10)
+        sigma = F.softplus(raw_sigma).clamp(min=self.eps, max=10).squeeze(-1)
+
+        return {"mean": mean, "sigma": sigma}
+
     def compute_feat_params(self, features: torch.Tensor) -> dict:
-        B = features.size(0)
-        x = features.view(B, -1)
-        raw_mean, raw_lambda = self.feat_net(x).split(1, dim=-1)
-        ig_mean = F.softplus(raw_mean).squeeze(-1) + self.eps   # > 0
-        lambda_ = F.softplus(raw_lambda).squeeze(-1) + self.eps   # > 0
-        return {"mean": ig_mean, "lambda": lambda_}
+        # flatten features
+        x_flat = features.view(features.size(0), -1)
 
-    # ----- komponentowe średnie -----
+        # clamp raw outputs
+        raw_mean = self.feat_mean_net(x_flat).clamp(-10.0, 10.0)
+        raw_lambda = self.feat_lambda_net(x_flat).clamp(-10.0, 10.0)
+
+        ig_mean = F.softplus(raw_mean).clamp(min=self.eps, max=1e3).squeeze(-1)
+        lam = F.softplus(raw_lambda).clamp(min=self.eps, max=1e3).squeeze(-1)
+
+        return {"mean": ig_mean, "lambda": lam}
+
     def component_mean(self, params: dict) -> torch.Tensor:
-        if "sigma" in params:          # Normal
-            return params["mean"]
-        # Inverse Gaussian – średnia = mean
+        # both Normal and IG component mean = mean
         return params["mean"]
 
     def get_distribution(self, params: dict, component: str = "ar"):
         if component == "ar":
-            # Normal component on the AR side
-            return Normal(loc=params["mean"], scale=params["sigma"])
-        else:                                   # "feat"
-            # Inverse-Gaussian component on the order-book side
-            return InverseGaussian(loc=params["mean"], concentration=params["lambda"])
+            return Normal(loc=params["mean"],
+                          scale=params["sigma"].clamp(min=self.eps))
+        else:
+            return InverseGaussian(loc=params["mean"],
+                                   concentration=params["lambda"].clamp(min=self.eps))
