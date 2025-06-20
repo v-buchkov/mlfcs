@@ -18,8 +18,7 @@ class BacktestResults():
                 last_train_date: datetime = datetime.strptime("2018-07-01 00:00:00", "%Y-%m-%d %H:%M:%S"),
                 is_training_expanded: bool = True,
                 forecast_horizon: int = 1,
-                weekly_metrics: list = None,
-                forecasts: pd.DataFrame = None,
+                forecasts: pd.Series = None,
                 label_name: str = None,
                 feature_names: list = None,
                 true_vola: pd.Series = None):
@@ -30,50 +29,40 @@ class BacktestResults():
         self.forecast_horizon = forecast_horizon
         self.label_name = label_name
         self.feature_names = feature_names
+        self.forecasts = forecasts
 
         if forecasts.shape[0] != true_vola.shape[0]:
             raise ValueError("The number of rows in the forecasts and true volatility must be the same.")
-        if forecasts.shape[1] != forecast_horizon:
-            raise ValueError("The number of columns in the forecasts must be equal to the forecast horizon.")
-        
-        if forecasts.shape[1] == 1:
-            self.forecasts = forecasts.h1
-        else:
-            raise NotImplementedError("The model must return a single step forecast. Please set the forecast_horizon to 1.")
-        
-        self.true_vola = true_vola
 
-        self.residuals = (self.true_vola - self.forecasts) # nans for timestamps where forecasts are missing
+        self.true_vola = true_vola
+        self.residuals = (self.true_vola - forecasts) # nans for timestamps where forecasts are missing
 
         first_test_datetime = forecasts.index[0]
-        self.mse = (self.residuals.loc[first_test_datetime:]**2).mean()
+        squared_residuals = self.residuals.loc[first_test_datetime:]**2
+        self.mse = squared_residuals.mean()
         self.rmse = np.sqrt(self.mse)
-        self.mae = (np.abs(self.residuals.loc[first_test_datetime:])).mean()
-
-        self.weekly_metrics_df = pd.DataFrame(weekly_metrics)
-        self.weekly_metrics_mean = self.weekly_metrics_df.mean()
-        self.weekly_metrics_std = self.weekly_metrics_df.std()
+        absolute_residuals = np.abs(self.residuals.loc[first_test_datetime:])
+        self.mae = absolute_residuals.mean()
 
         print(f"Backtest finished successfully.")
         print("---------------------------------------------------")
         print(f"Model: {self.model_name}")
         print(f"RMSE: {self.rmse:.7f}")
         print(f"MAE:  {self.mae :.7f}")
-        print(f"Weekly RMSE: {self.weekly_metrics_mean.rmse:.7f} +/- {self.weekly_metrics_std.rmse:.7f}")
-        print(f"Weekly MAE:  {self.weekly_metrics_mean.mae:.7f} +/- {self.weekly_metrics_std.mae:.7f}")
+        #print(f"Weekly RMSE: {self.weekly_metrics_mean.rmse:.7f} +/- {self.weekly_metrics_std.rmse:.7f}")
+        #print(f"Weekly MAE:  {self.weekly_metrics_mean.mae:.7f} +/- {self.weekly_metrics_std.mae:.7f}")
         print(f"Expanding training set: {self.is_training_expanded}")
         #print(f"Forecast horizon: {self.forecast_horizon}")
         print(f"Test starting date: {self.last_train_date}")    
         print("---------------------------------------------------")
-        print(f"Latex formatting:")
-        # this print is not 
-        print(f"{self.model_name} &  "
-            + f"{(1e3 * self.weekly_metrics_mean.rmse):.7f} &  "
-            + f"{(1e3 * self.weekly_metrics_std.rmse):.7f}  &  "
-            + f"{(1e3 * self.weekly_metrics_mean.mae):.7f}  &  "
-            + f"{(1e3 *self.weekly_metrics_std.mae):.7f}  \\\\")
+        # print(f"Latex formatting:")
+        # print(f"{self.model_name} &  "
+        #     + f"{(1e3 * self.weekly_metrics_mean.rmse):.7f} &  "
+        #     + f"{(1e3 * self.weekly_metrics_std.rmse):.7f}  &  "
+        #     + f"{(1e3 * self.weekly_metrics_mean.mae):.7f}  &  "
+        #     + f"{(1e3 *self.weekly_metrics_std.mae):.7f}  \\\\")
 
-        plt.plot(self.forecasts, label=self.model_name)
+        plt.plot(forecasts, label=self.model_name)
         plt.plot(self.true_vola, label="Realized", alpha=0.5)
         plt.ylim(0, 0.001)
         plt.legend()
@@ -95,6 +84,7 @@ class BenchmarkBacktester():
     def __init__(
         self,
         dataset: pd.DataFrame,
+        output_template: pd.DataFrame,
         last_train_date: datetime = datetime.strptime("2018-06-30 23:59:59", "%Y-%m-%d %H:%M:%S"),
         is_training_expanded: bool = True,
         forecast_horizon: int = 1,
@@ -106,55 +96,40 @@ class BenchmarkBacktester():
         TODO add docstring
         """
         self.dataset = dataset
+        self.output_template = output_template
         self.last_train_date = last_train_date
-        self.first_test_datetime = dataset.loc[last_train_date:].index[1]
+        self.first_test_datetime = output_template.index[0]
         self.is_training_expanded = is_training_expanded
         self.forecast_horizon = forecast_horizon
         self.lookback = lookback
-
-        # every monday after the last training date
-        self.refit_dates = [day for day in (pd.date_range(start=self.last_train_date, 
-                                                          end=self.dataset.index[-1],
-                                                          freq='D')
-                                            ) if day.strftime("%A") == "Monday"]
-        self.refit_dates += [self.refit_dates[-1] + pd.Timedelta(days=7)] # to include the last monday in the backtest
-        self.test_timestamps = self.dataset.loc[self.first_test_datetime:].index
+        self.bias_lookback = pd.Timedelta(hours=24) # used to de-bias the predictions if using log(y)
 
 
-    def backtest(self, model_cls, hyperparams=None, use_ob_feats=True) -> BacktestResults:
+    def backtest(self, 
+                 benchmark, 
+                 hyperparams=None, 
+                 use_ob_feats=True, 
+                 use_log_y=True) -> BacktestResults:
         """
         TODO add docstring
         """
 
         # Instantiate the model. 
         if hyperparams is None:
-            model = model_cls(use_ob_feats=use_ob_feats)
+            model = benchmark(use_ob_feats=use_ob_feats, use_log_y=use_log_y)
         else:
-            model = model_cls(**hyperparams, use_ob_feats=use_ob_feats)
+            model = benchmark(**hyperparams, use_ob_feats=use_ob_feats, use_log_y=use_log_y)
     
         if not hasattr(model, 'label_name'):
             model.label_name = 'vol'
 
-        # Fit the model to the initial training data
-        model.fit(y=self.dataset.loc[:self.last_train_date, model.label_name],
-                  X=self.dataset.loc[:self.last_train_date, model.feature_names])
+        output = self.output_template.copy().rename(
+            columns={"model_name": model.name}
+        )
 
-        # initialize monday counters
-        prev_monday = self.refit_dates[0] - pd.Timedelta(days=7)
-        next_monday = self.refit_dates[0]
-
-        # create an empty dataframe to store the forecasts
-        forecasts = pd.DataFrame(index = self.test_timestamps,
-                                 columns = [f'h{h}' for h in range(1, self.forecast_horizon + 1)])
-
-        self.weekly_metrics = []
-        first_week = True
-        for t in tqdm(self.test_timestamps):
+        for t in tqdm(output.index):
             # Check if we need to refit the model
-            if prev_monday < t and t >= next_monday:
-                # Refit the model when you reach the next monday
-                prev_monday = next_monday
-                next_monday = self.refit_dates[self.refit_dates.index(next_monday) + 1]
+            if output.loc[t, 'retraining_flag']:
                 # forecast and update
                 if self.is_training_expanded:
                     """ refit the model with all data up to t (excluding t)
@@ -170,36 +145,31 @@ class BenchmarkBacktester():
                     """
                     model.fit(y=self.dataset.loc[:t-pd.Timedelta(hours=1), model.label_name],
                               X=self.dataset.loc[:t-pd.Timedelta(hours=1), model.feature_names])
-
                 else:
                     # refit the model with only the data from t-lookback up to t
                     model.fit(y=self.dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), model.label_name],
                               X=self.dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), model.feature_names])
 
-                if first_week:
-                    first_week = False
-                else:
-                    weekly_res = (self.dataset.loc[t-self.lookback:t-pd.Timedelta(hours=1), 'vol'] 
-                                   - forecasts.loc[t-self.lookback:t-pd.Timedelta(hours=1), 'h1'])
-                    rmse = np.sqrt((weekly_res**2).mean())
-                    mae = np.abs(weekly_res).mean()
-                    self.weekly_metrics.append({"rmse":rmse, "mae":mae})
-
-
-            forecasts.loc[t] = model.forecast(steps=self.forecast_horizon,
-                                              X=self.dataset.loc[:t, model.feature_names])
+            pred = model.forecast(steps=self.forecast_horizon,
+                                  X=self.dataset.loc[:t, model.feature_names])
             
+            if use_log_y:
+                cond_vola = np.var(self.dataset.loc[t-self.bias_lookback:t-pd.Timedelta(hours=1), 'vol'].values)
+                # cond_vola should be variance of residuals but the two are very similar because 
+                # of relatively low predictability of volatility
+                pred = pred * np.exp(cond_vola/2)
+
+            output.loc[t, model.name] = pred[0]  # assuming single step forecast
+
             model.update(new_y = self.dataset.loc[t:t, model.label_name],
                          new_X = self.dataset.loc[t:t, model.feature_names])
-
 
         # Return the forecasts
         return BacktestResults(model=model,
                                last_train_date=self.last_train_date,
                                is_training_expanded=self.is_training_expanded,
                                forecast_horizon=self.forecast_horizon,
-                               forecasts=forecasts,
-                               weekly_metrics=self.weekly_metrics,
+                               forecasts=output.loc[:, model.name],
                                label_name=model.label_name,
                                feature_names=model.feature_names,
                                true_vola=self.dataset.loc[self.first_test_datetime:, 'vol'])
