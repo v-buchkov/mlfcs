@@ -10,7 +10,7 @@ class Loss(Enum):
     MSE = MSEVolLossAbstract
     NLL = NormalNLL
     BAYESIAN_NLL = BayesianNLL
-    TM_N_NLL = MixtureNormalNLL
+    TM_N_NLL = lambda: MixtureNormalNLL(l2_coef=1e-4)
     TM_NH_NLL = HingeNormalMixtureNLL
     TM_LN_NLL = MixtureLogNormalNLL
     TM_IG_NLL = MixtureInverseGaussianNLL

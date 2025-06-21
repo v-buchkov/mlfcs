@@ -7,6 +7,8 @@ import math
 
 from vol_predict.loss.abstract_custom_loss import AbstractCustomLoss
 
+# Currently we are using mostly the same loss for all mixture models.
+# This is a generic loss that can be used for any mixture of distributions.
 
 class GenericMixtureNLL(AbstractCustomLoss):
     """
@@ -84,6 +86,7 @@ class GenericMixtureNLL(AbstractCustomLoss):
 
         return nll + self.compute_l2(model) + self.kl_weight * kl_term
 
+# Losses below are a relict of the old implementation.
 
 class MixtureNormalNLL(AbstractCustomLoss):
     def __init__(self, eps: float = 1e-12, l2_coef: float = 0.0):
@@ -113,9 +116,9 @@ class MixtureNormalNLL(AbstractCustomLoss):
         if model is None:
             model = self._model
 
-        gate = pred_vol["gate_weights"]       # [B,2]
-        ar = pred_vol["ar_params"]            # dict
-        feat = pred_vol["feat_params"]        # dict
+        gate = pred_vol["gate_weights"] 
+        ar = pred_vol["ar_params"]   
+        feat = pred_vol["feat_params"]      
         x = true_returns.clamp(min=self.eps)  # avoid log(0)
 
         mu_ar = ar["mean"]
@@ -145,7 +148,6 @@ class MixtureNormalNLL(AbstractCustomLoss):
         )
         l2_penalty = self.compute_l2(model) if model is not None else 0.0
         return -log_mix_pdf.mean() + l2_penalty
-
 
 class HingeNormalMixtureNLL(MixtureNormalNLL):
     def __init__(self, penalty_coef: float = 1.0, delta: float = 0.0, eps: float = 1e-12, l2_coef: float = 0.0):
