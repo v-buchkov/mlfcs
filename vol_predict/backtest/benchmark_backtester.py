@@ -3,12 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from typing import Union
-
 from datetime import datetime
-
 from tqdm import tqdm
-
 from sklearn.preprocessing import StandardScaler
 
 
@@ -102,7 +98,7 @@ class BenchmarkBacktester():
         self.is_training_expanded = is_training_expanded
         self.forecast_horizon = forecast_horizon
         self.lookback = lookback
-        self.bias_lookback = pd.Timedelta(hours=24) # used to de-bias the predictions if using log(y)
+        self.bias_lookback = pd.Timedelta(hours=24) # used to de-bias prediction if modelling log(y)
 
 
     def backtest(self, 
@@ -121,7 +117,7 @@ class BenchmarkBacktester():
             model = benchmark(**hyperparams, use_ob_feats=use_ob_feats, use_log_y=use_log_y)
     
         if not hasattr(model, 'label_name'):
-            model.label_name = 'vol'
+            model.label_name = 'log_vol' if use_log_y else 'vol'
 
         output = self.output_template.copy().rename(
             columns={"model_name": model.name}
@@ -154,12 +150,13 @@ class BenchmarkBacktester():
                                   X=self.dataset.loc[:t, model.feature_names])
             
             if use_log_y:
-                cond_vola = np.var(self.dataset.loc[t-self.bias_lookback:t-pd.Timedelta(hours=1), 'vol'].values)
+                conditional_log_vola = np.var(self.dataset.loc[t-self.bias_lookback:t-pd.Timedelta(hours=1), 'log_vol'].values)
                 # cond_vola should be variance of residuals but the two are very similar because 
                 # of relatively low predictability of volatility
-                pred = pred * np.exp(cond_vola/2)
+                pred = pred * np.exp(conditional_log_vola/2)
 
-            output.loc[t, model.name] = pred[0]  # assuming single step forecast
+            # TODO add support for multi-step forecasts
+            output.loc[t, model.name] = pred[0]  # assuming single step forecast 
 
             model.update(new_y = self.dataset.loc[t:t, model.label_name],
                          new_X = self.dataset.loc[t:t, model.feature_names])
