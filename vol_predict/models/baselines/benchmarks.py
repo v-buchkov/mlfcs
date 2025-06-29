@@ -1,31 +1,18 @@
 from vol_predict.models.abstract_benchmark import AbstractBenchmark
 import numpy as np
 import pandas as pd
-import time
-import math
 import matplotlib.pyplot as plt
-# import tensorflow as tf
-# from tensorflow_probability import sts, mcmc, vi
-# from tensorflow_probability import distributions as tfd
-# from tensorflow_probability import bijectors as tfb
 
 from sklearn.preprocessing import StandardScaler
 
 from statsmodels.tsa.arima.model import ARIMA
 from arch import arch_model
-from arch.univariate import HARX
+import statsmodels.api as sm
 
 from scipy.optimize import lsq_linear
 from sklearn.linear_model import ElasticNet
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
-
-# import time
-# import numpy as np
-# import scipy as sp
-# import cvxpy as cp
-# from abc import ABC, abstractmethod
-# from tqdm import tqdm
 
 
 class Naive(AbstractBenchmark):
@@ -45,12 +32,10 @@ class Naive(AbstractBenchmark):
         self.name = "Naive"
         
     
-    def _fit(self, y: pd.Series, X: pd.DataFrame):
-        self.last_vol = X.loc[:, self.feature_names].values[-1] # not used, since forecast will always receive X
+    def fit(self, y: pd.Series, X: pd.DataFrame):
+        pass 
 
-    def _forecast(self, steps: int=1, X: pd.DataFrame=None) -> np.ndarray:
-        # if X is None:
-        #     return self.last_observed
+    def forecast(self, steps: int=1, X: pd.DataFrame=None) -> np.ndarray:
         if steps == 1:
             return X.loc[:,self.feature_names].values[-1]
         else:
@@ -58,8 +43,7 @@ class Naive(AbstractBenchmark):
             # `steps` times.
             return np.full(steps, X.loc[:,self.feature_names].values[-1])
 
-    def _update(self, new_y: pd.Series, new_X: pd.DataFrame):
-        # self.last_observed = new_y.values[-1] # not used, since forecast will always receive X 
+    def update(self, new_y: pd.Series, new_X: pd.DataFrame):
         pass
 
 
@@ -134,7 +118,7 @@ class EWMA(AbstractBenchmark):
         assert forgetting_factor < 1.0, "forgetting_factor must be less than 1"
         return -np.log(2.0) / np.log(forgetting_factor)
 
-    def _fit(self,
+    def fit(self,
             y: pd.Series,
             X: pd.DataFrame):
         """
@@ -145,9 +129,9 @@ class EWMA(AbstractBenchmark):
         # For now, we just use the forgetting factor passed in the constructor.
 
         """
-        #self.stored_data = X.loc[:, self.feature_names].values
+        pass
 
-    def _forecast(
+    def forecast(
         self,
         steps: int = 1,
         X: pd.DataFrame=None) -> float:
@@ -175,17 +159,10 @@ class EWMA(AbstractBenchmark):
         return ret 
 
     
-    def _update(self, new_y: np.ndarray, new_X: np.ndarray):
+    def update(self, new_y: np.ndarray, new_X: np.ndarray):
         """
         Update the model with new data.
         """
-        # if self.stored_data.shape[0] == self.look_back:
-        #     # remove the oldest data
-        #     self.stored_data = np.roll(self.stored_data, -1, axis=0)
-        #     self.stored_data[-1] = new_data
-        # else:
-        #     # add the new data
-        # self.stored_data = np.append(self.stored_data, new_y.vol.values)
         pass
 
 
@@ -210,7 +187,8 @@ class ARIMAX(AbstractBenchmark):
         self.order = (p, d, q)
         self.use_ob_feats = use_ob_feats
         self.use_log_y = use_log_y
-        self.bais_term_window = 24*5 # ~ 1 week of data
+        self.label_name = 'log_vol' if use_log_y else 'vol'
+        # self.bais_term_window = 24*5 # ~ 1 week of data
 
         self.name = "ARIMAX" if use_ob_feats else "ARIMA"
         # Models from `statsmodels` and arch are wrapped without vol_lag1 as feature
@@ -219,26 +197,14 @@ class ARIMAX(AbstractBenchmark):
         self.feature_names = []
         if use_ob_feats:
             self.feature_names += [
+                                'log_volume',
                                 'mean_spread',
                                 'mean_bid_depth',
-                                'mean_ask_volume', 
-                                'mean_bid_volume',
-                                #'mean_volume_diff', 
-                                #'mean_weighted_spread',
-                                #'mean_ask_slope',
-                                #'mean_bid_slope',
-                                  #'trend_spread',
-                                  #'trend_bid_depth',
-                                  #'trend_ask_volume',
-                                  #'trend_bid_volume', 
-                                  #'trend_volume_diff', 
-                                  #'trend_weighted_spread',
-                                  #'trend_ask_slope', 
-                                  #'trend_bid_slope'
+                                'mean_ask_volume',
                                   ]
         self.results = None
 
-    def _fit(self, y: pd.Series, X: pd.DataFrame):
+    def fit(self, y: pd.Series, X: pd.DataFrame):
         """
 
         """
@@ -251,19 +217,17 @@ class ARIMAX(AbstractBenchmark):
             self.model = ARIMA(endog=y.values, order=self.order)
             self.stored_y = y.values
 
-
         self.results = self.model.fit()
         self.residuals = self.results.resid
 
         print(self.results.summary())
 
-    def _forecast(self, steps: int = 1, X: pd.DataFrame = None):
+    def forecast(self, steps: int = 1, X: pd.DataFrame = None):
         """
         Forecast the next steps volatility.
         """
         if self.results is None:
             raise ValueError("Model not fitted yet. Please fit the model first.")
-
 
         if self.use_ob_feats:
             pred = self.results.forecast(steps=steps, exog=X.values[-1])
@@ -271,12 +235,12 @@ class ARIMAX(AbstractBenchmark):
             pred = self.results.forecast(steps=steps)
 
         if self.use_log_y:
-            bias_term = self.results.resid[-self.bais_term_window:].var()
-            return np.exp(pred + bias_term/2)
+            # Bias correction is done by backtester
+            return np.exp(pred)
         else:
             return pred
 
-    def _update(self, 
+    def update(self, 
                new_y: pd.Series,
                new_X: pd.DataFrame):
         """
@@ -317,14 +281,14 @@ class GARCH(AbstractBenchmark):
         self.q = q
         self.order = (p, o, q)
         self.dist = dist
-        self.scale = scale
+        self.scale = scale # NOT used
         self.use_ob_feats = use_ob_feats
+        self.use_log_y = use_log_y
         self.type = type
         self.name = self.type
         if use_ob_feats:
             self.name += "X"
-        if dist == 'normal' or dist == 'gaussian':
-            self.name += f"_{dist}"
+        self.name += f"_{dist}"
 
         # Models from `statsmodels` and arch are wrapped without vol_lag1 as feature
         # Models from `sklearn`, and custom made models are wrapped with vol_lag1 as feature
@@ -336,28 +300,15 @@ class GARCH(AbstractBenchmark):
                                 'mean_bid_depth',
                                 'mean_ask_volume', 
                                 'mean_bid_volume',
-                                #'mean_volume_diff', 
-                                #'mean_weighted_spread',
-                                #'mean_ask_slope',
-                                #'mean_bid_slope',
-                                  #'trend_spread',
-                                  #'trend_bid_depth',
-                                  #'trend_ask_volume',
-                                  #'trend_bid_volume', 
-                                  #'trend_volume_diff', 
-                                  #'trend_weighted_spread',
-                                  #'trend_ask_slope', 
-                                  #'trend_bid_slope'
                                   ]
         self.label_name = 'ret'
         self.results = None
 
-    def _fit(self, y: pd.Series, X: pd.DataFrame):
+    def fit(self, y: pd.Series, X: pd.DataFrame):
         """
         """
 
         if self.use_ob_feats:
-            print("GARCH uses OB features")
             self.stored_y = y.values
             self.stored_X = X.values
             print(self.stored_X.shape)
@@ -388,7 +339,7 @@ class GARCH(AbstractBenchmark):
         print(self.results.summary())
 
 
-    def _forecast(self, steps: int = 1, X: pd.DataFrame = None):
+    def forecast(self, steps: int = 1, X: pd.DataFrame = None):
         """
         Forecast the next steps volatility.
         """
@@ -396,16 +347,15 @@ class GARCH(AbstractBenchmark):
             raise ValueError("Model not fitted yet. Please fit the model first.")
 
         if self.use_ob_feats:
-            print(X)
             X = X.values[-1, :].reshape(-1, 1)
             X = X[:,: , np.newaxis]
             print(X.shape)
-            return self.results.forecast(horizon=steps, x=X).variance.values[0][0]
+            return self.results.forecast(horizon=steps, x=X).variance.values[0]#[0]
         else:
-            return self.results.forecast(horizon=steps).variance.values[0][0]
+            return self.results.forecast(horizon=steps).variance.values[0]#[0]
 
 
-    def _update(self, new_y: pd.Series, new_X: pd.DataFrame):
+    def update(self, new_y: pd.Series, new_X: pd.DataFrame):
         """
         Update the model with new data.
         """
@@ -436,118 +386,107 @@ class GARCH(AbstractBenchmark):
         self.results = self.model.fix(self.results.params.values)
 
 
-class HAR(AbstractBenchmark):
+class HARX(AbstractBenchmark):
     """
     HAR volatility predictor (we know already that vola is stationary). 
     Given the past volatility, predict the next one using GARCH model.
     """
     def __init__(
         self,
-        lags: list,
-        distribution,
+        lags: list = [1, 6, 24], # lags for HAR model
+        l2: float = 70.0, # shrinkage parameter, l2 regularization parameter
+        is_weighted: bool = False, # whether to weight points by the inverse of the vola
         use_ob_feats: bool = False,
         use_log_y: bool = True,
         *args,
         **kwargs,
     ):
         self.lags = lags
-        self.distribution = distribution
+        self.l2 = l2
+        self.is_weighted = is_weighted
         self.use_ob_feats = use_ob_feats
-        self.label_name = 'vol'
+        self.use_log_y = use_log_y
+        self.label_name = 'log_vol' if use_log_y else 'vol'
         self.name = "HARX" if use_ob_feats else "HAR"
-        # Models from `statsmodels` and arch are wrapped without vol_lag1 as feature
-        # Models from `sklearn`, and custom made models are wrapped with vol_lag1 as feature
-        # self.feature_names = ['vol_lag1']
-        self.feature_names = []
+        
+        if self.use_log_y:
+            self.ma_features = [f'log_vol_lag1_smooth{lag}' for lag in self.lags]
+        else:
+            self.ma_features = [f'vol_lag1_smooth{lag}' for lag in self.lags]
+
         if use_ob_feats:
-            self.feature_names += [
+            self.ob_features = [
+                                'log_volume',
                                 'mean_spread',
                                 'mean_bid_depth',
-                                'mean_ask_volume', 
-                                'mean_bid_volume',
-                                #'mean_volume_diff', 
-                                #'mean_weighted_spread',
-                                #'mean_ask_slope',
-                                #'mean_bid_slope',
-                                  #'trend_spread',
-                                  #'trend_bid_depth',
-                                  #'trend_ask_volume',
-                                  #'trend_bid_volume', 
-                                  #'trend_volume_diff', 
-                                  #'trend_weighted_spread',
-                                  #'trend_ask_slope', 
-                                  #'trend_bid_slope'
+                                'mean_ask_volume',
+                                "iq_range_bid_depth",
+                                "iq_range_ask_volume",
+                                "iq_range_ask_slope",
                                   ]
+            self.feature_names = self.ma_features + self.ob_features
+        else:
+            self.ob_features = []
+            self.feature_names = self.ma_features
+        
         self.results = None
 
 
-    def _fit(self, y: pd.Series, X: pd.DataFrame):
+    def fit(self, y: pd.Series, X: pd.DataFrame):
         """
         """
 
-        if self.use_ob_feats:
-            self.stored_y = y.values
-            self.stored_X = X.values
-            self.model = HARX(
-                y=self.stored_y, 
-                x=self.stored_X, 
-                lags=self.lags,
-                distribution=self.distribution,
-                #rescale=True,
-                )
-  
+        X = X.loc[:, self.feature_names]
+        
+        self.scaler = StandardScaler()
+        X = self.scaler.fit_transform(X)
+
+        X = sm.add_constant(X, has_constant='skip') 
+
+        if self.is_weighted:
+            if self.use_log_y:
+                weights = 1 / (0.0012 + np.exp(y.values))
+            else:
+                weights = 1 / (0.0012 + y.values)
         else:
-            self.stored_y = y.values
-            self.model = HARX(
-                y=self.stored_y, 
-                lags=self.lags,
-                distribution=self.distribution,
-                #rescale=True,
-                )
+            weights = np.ones(y.shape[0])
 
-        # If there is not start_params use this
-        self.results = self.model.fit(disp="off")
-        print(self.results.summary())
+        # scale by sample size to make shrinkage uniform across different sample sizes
+        normalized_weights = y.values.shape[0] * (weights / (weights.sum()))
+        W = np.diag(normalized_weights)
+
+        LambdaMat = self.l2 * np.diag([0]*(1+len(self.lags)) + [1]*(len(self.ob_features)))
+
+        self.beta = np.linalg.inv(X.T @ (W @ X) +  LambdaMat) @ (X.T @ (W @ y.values))
+        self.results = self.beta
 
 
-    def _forecast(self, steps: int = 1, X: pd.DataFrame = None):
+    def forecast(self, steps: int = 1, X: pd.DataFrame = None):
         """
         Forecast the next steps volatility.
         """
         if self.results is None:
             raise ValueError("Model not fitted yet. Please fit the model first.")
 
-        if self.use_ob_feats:
-            X = X.values[-1, :].reshape(-1, 1)
-            X = X[:,: , np.newaxis]
-            return self.results.forecast(horizon=steps, x=X).mean.values[0][0]
+        X = X.loc[:, self.feature_names].iloc[-1:]  # take the last row for forecasting
+        
+        X = self.scaler.transform(X)
+        
+        # for a single observation we need `has_constant='add'`
+        X = sm.add_constant(X, has_constant='add') 
+
+        if self.use_log_y:
+            return np.array(np.exp(X @ self.beta))
         else:
-            return self.results.forecast(horizon=steps).mean.values[0][0]
+            return np.array(X @ self.beta)
 
 
-    def _update(self, new_y: pd.Series, new_X: pd.DataFrame):
+
+    def update(self, new_y: pd.Series, new_X: pd.DataFrame):
         """
         Update the model with new data.
         """
-        self.stored_y = np.append(self.stored_y, new_y.values)
-        if self.use_ob_feats:
-            self.stored_X = np.append(self.stored_X, new_X.values, axis=0)
-            self.model = HARX(
-                y=self.stored_y, 
-                x=self.stored_X, 
-                lags=self.lags,
-                distribution=self.distribution,
-                #rescale=True,
-                )
-        else:
-            self.model = HARX(
-                y=self.stored_y, 
-                lags=self.lags,
-                distribution=self.distribution,
-                #rescale=True,
-                )
-        
-        self.results = self.model.fix(self.results.params.values)
+        pass # not needed for this model
 
 
 class ENET(AbstractBenchmark):
@@ -558,78 +497,93 @@ class ENET(AbstractBenchmark):
         self,
         alpha: float,
         l1_ratio: float,
+        num_vola_lags: int = 10,
         use_ob_feats: bool = True,
+        use_log_y: bool = True,
         *args,
         **kwargs,
     ):
 
         self.use_ob_feats = use_ob_feats
-        self.label_name = 'vol'
+        self.use_log_y = use_log_y
+        self.label_name = 'log_vol' if use_log_y else 'vol'
         self.name = "ENET"
-        # Models from `statsmodels` and arch are wrapped without vol_lag1 as feature
-        # Models from `sklearn`, and custom made models are wrapped with vol_lag1 as feature
-        # self.feature_names = ['vol_lag1']
-        self.feature_names = [f'log_vol_lag{i}' for i in range(1, 10)]
+        self.num_vola_lags = num_vola_lags
+        if self.use_log_y:
+            self.feature_names = [f'log_vol_lag{i}' for i in range(1, self.num_vola_lags)]
+        else:
+            self.feature_names = [f'vol_lag{i}' for i in range(1, self.num_vola_lags)]
         if use_ob_feats:
             self.feature_names += [
+                                'log_volume',
                                 'mean_spread',
                                 'mean_bid_depth',
-                                'mean_ask_volume', 
+                                'mean_ask_volume',
                                 'mean_bid_volume',
-
-                                'mean_volume_diff', 
                                 'mean_weighted_spread',
                                 'mean_ask_slope',
                                 'mean_bid_slope',
-                                  'trend_spread',
-                                  'trend_bid_depth',
-                                  'trend_ask_volume',
-                                  'trend_bid_volume', 
-                                  'trend_volume_diff', 
-                                  'trend_weighted_spread',
-                                  'trend_ask_slope', 
-                                  'trend_bid_slope'
-                                  ]
+                                # 'trend_spread',
+                                # 'trend_bid_depth',
+                                # 'trend_ask_volume',
+                                # 'trend_bid_volume',
+                                # 'trend_weighted_spread',
+                                # 'trend_ask_slope',
+                                # 'trend_bid_slope',
+                                'iq_range_spread',
+                                'iq_range_bid_depth',
+                                'iq_range_ask_volume',
+                                'iq_range_bid_volume',
+                                'iq_range_weighted_spread',
+                                'iq_range_ask_slope',
+                                'iq_range_bid_slope',
+                                ]
 
         self.alpha = alpha
         self.l1_ratio = l1_ratio
         self.results = None
 
 
-    def _fit(self, y: pd.Series, X: pd.DataFrame):
+    def fit(self, y: pd.Series, X: pd.DataFrame):
         """
         """
-
-        # scale the data
-        self.scalerX = StandardScaler()
-        # self.scalerY = StandardScaler()
-        self.stored_X = self.scalerX.fit_transform(X.values)
-        # self.stored_y = self.scalerY.fit_transform(y.values.reshape(-1, 1)).flatten()
-        self.stored_y = np.log(y.values)
+        X = X.loc[:, self.feature_names]
+        
+        self.scaler = StandardScaler()
+        X = self.scaler.fit_transform(X)
 
         self.model = ElasticNet(
             alpha=self.alpha,
             l1_ratio=self.l1_ratio,
             )
-        self.model.fit(self.stored_X, self.stored_y)
+        self.model.fit(X, y)
+        self.results = self.model
 
-    def _forecast(self, steps: int = 1, X: pd.DataFrame = None):
+    def forecast(self, steps: int = 1, X: pd.DataFrame = None):
         """
         Forecast the next steps volatility.
         """
-        X = X.values[-1, :].reshape(1, -1)
-        X = self.scalerX.transform(X)
+        if self.results is None:
+            raise ValueError("Model not fitted yet. Please fit the model first.")
+        # X = X.loc[:, self.feature_names].values[-1, :].reshape(1, -1)#.iloc[-1:]  # take the last row for forecasting
 
-        pred = self.model.predict(X)[0]
+        X = X.loc[:, self.feature_names].iloc[-1:]  # take the last row for forecasting
+        X = self.scaler.transform(X)
+
+        #X = X.values[-1, :].reshape(1, -1)
+        #X = self.scalerX.transform(X)
+
+        pred = self.model.predict(X)#[0]
         return np.exp(pred)
 
 
-    def _update(self, new_y: pd.Series, new_X: pd.DataFrame):
+    def update(self, new_y: pd.Series, new_X: pd.DataFrame):
         """
         Update the model with new data.
         """
-        self.stored_y = np.append(self.stored_y, np.log(new_y.values))
-        self.stored_X = np.append(self.stored_X, self.scalerX.transform(new_X.values[-1, :].reshape(1, -1)), axis=0)
+        # self.stored_y = np.append(self.stored_y, np.log(new_y.values))
+        # self.stored_X = np.append(self.stored_X, self.scalerX.transform(new_X.values[-1, :].reshape(1, -1)), axis=0)
+        pass
 
 
 class RF(AbstractBenchmark):
@@ -640,78 +594,87 @@ class RF(AbstractBenchmark):
         n_estimators=100,
         max_depth=10,
         min_samples_split=2,
+        num_vola_lags: int = 10,
         use_ob_feats: bool = True,
+        use_log_y: bool = True,
         *args,
         **kwargs,
     ):
-
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
 
         self.use_ob_feats = use_ob_feats
-        self.label_name = 'vol'
+        self.use_log_y = use_log_y
+        self.label_name = 'log_vol' if use_log_y else 'vol'
         self.name = "RF"
-        # Models from `statsmodels` and arch are wrapped without vol_lag1 as feature
-        # Models from `sklearn`, and custom made models are wrapped with vol_lag1 as feature
-        # self.feature_names = ['vol_lag1']
-        self.feature_names = [f'log_vol_lag{i}' for i in range(1, 10)]
+        self.num_vola_lags = num_vola_lags
+        if self.use_log_y:
+            self.feature_names = [f'log_vol_lag{i}' for i in range(1, self.num_vola_lags)]
+        else:
+            self.feature_names = [f'vol_lag{i}' for i in range(1, self.num_vola_lags)]
         if use_ob_feats:
             self.feature_names += [
+                                'log_volume',
                                 'mean_spread',
                                 'mean_bid_depth',
-                                'mean_ask_volume', 
+                                'mean_ask_volume',
                                 'mean_bid_volume',
-
-                                'mean_volume_diff', 
                                 'mean_weighted_spread',
                                 'mean_ask_slope',
                                 'mean_bid_slope',
-                                  'trend_spread',
-                                  'trend_bid_depth',
-                                  'trend_ask_volume',
-                                  'trend_bid_volume', 
-                                  'trend_volume_diff', 
-                                  'trend_weighted_spread',
-                                  'trend_ask_slope', 
-                                  'trend_bid_slope'
-                                  ]
-        self.results = None        
+                                'iq_range_spread',
+                                'iq_range_bid_depth',
+                                'iq_range_ask_volume',
+                                'iq_range_bid_volume',
+                                'iq_range_weighted_spread',
+                                'iq_range_ask_slope',
+                                'iq_range_bid_slope',
+                                ]
 
-    def _fit(self, y: pd.Series, X: pd.DataFrame):
+        self.results = None
+
+    def fit(self, y: pd.Series, X: pd.DataFrame):
         """
         """
-
-        # scale the data
-        self.scalerX = StandardScaler()
-        # self.scalerY = StandardScaler()
-        self.stored_X = self.scalerX.fit_transform(X.values)
-        # self.stored_y = self.scalerY.fit_transform(y.values.reshape(-1, 1)).flatten()
-        self.stored_y = y.values
+        X = X.loc[:, self.feature_names]
+        
+        self.scaler = StandardScaler()
+        X = self.scaler.fit_transform(X)
 
         self.model = RandomForestRegressor(
             n_estimators= self.n_estimators,
             max_depth = self.max_depth,
             min_samples_split = self.min_samples_split,
         )
-        self.model.fit(self.stored_X, self.stored_y)
+        self.model.fit(X, y)
+        self.results = self.model
 
-    def _forecast(self, steps: int = 1, X: pd.DataFrame = None):
+    def forecast(self, steps: int = 1, X: pd.DataFrame = None):
         """
         Forecast the next steps volatility.
         """
-        X = X.values[-1, :].reshape(1, -1)
-        X = self.scalerX.transform(X)
+        if self.results is None:
+            raise ValueError("Model not fitted yet. Please fit the model first.")
+        # X = X.loc[:, self.feature_names].values[-1, :].reshape(1, -1)#.iloc[-1:]  # take the last row for forecasting
 
-        return self.model.predict(X)[0]
+        X = X.loc[:, self.feature_names].iloc[-1:]  # take the last row for forecasting
+        X = self.scaler.transform(X)
+
+        #X = X.values[-1, :].reshape(1, -1)
+        #X = self.scalerX.transform(X)
+
+        pred = self.model.predict(X)#[0]
+        return np.exp(pred)
 
 
-    def _update(self, new_y: pd.Series, new_X: pd.DataFrame):
+    def update(self, new_y: pd.Series, new_X: pd.DataFrame):
         """
         Update the model with new data.
         """
-        self.stored_y = np.append(self.stored_y, new_y.values)
-        self.stored_X = np.append(self.stored_X, self.scalerX.transform(new_X.values[-1, :].reshape(1, -1)), axis=0)
+        # self.stored_y = np.append(self.stored_y, np.log(new_y.values))
+        # self.stored_X = np.append(self.stored_X, self.scalerX.transform(new_X.values[-1, :].reshape(1, -1)), axis=0)
+        pass
 
     
 class XGBM(AbstractBenchmark):
@@ -722,77 +685,85 @@ class XGBM(AbstractBenchmark):
         n_estimators=100,
         max_depth=10,
         min_samples_split=2,
+        num_vola_lags: int = 10,
         use_ob_feats: bool = True,
+        use_log_y: bool = True,
         *args,
         **kwargs,
     ):
-
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
 
         self.use_ob_feats = use_ob_feats
-        self.label_name = 'vol'
+        self.use_log_y = use_log_y
+        self.label_name = 'log_vol' if use_log_y else 'vol'
         self.name = "XGBM"
-        # Models from `statsmodels` and arch are wrapped without vol_lag1 as feature
-        # Models from `sklearn`, and custom made models are wrapped with vol_lag1 as feature
-        # self.feature_names = ['vol_lag1']
-        self.feature_names = [f'vol_lag{i}' for i in range(1, 10)]
+        self.num_vola_lags = num_vola_lags
+        if self.use_log_y:
+            self.feature_names = [f'log_vol_lag{i}' for i in range(1, self.num_vola_lags)]
+        else:
+            self.feature_names = [f'vol_lag{i}' for i in range(1, self.num_vola_lags)]
         if use_ob_feats:
             self.feature_names += [
+                                'log_volume',
                                 'mean_spread',
                                 'mean_bid_depth',
-                                'mean_ask_volume', 
+                                'mean_ask_volume',
                                 'mean_bid_volume',
-
-                                'mean_volume_diff', 
                                 'mean_weighted_spread',
                                 'mean_ask_slope',
                                 'mean_bid_slope',
-                                  'trend_spread',
-                                  'trend_bid_depth',
-                                  'trend_ask_volume',
-                                  'trend_bid_volume', 
-                                  'trend_volume_diff', 
-                                  'trend_weighted_spread',
-                                  'trend_ask_slope', 
-                                  'trend_bid_slope'
-                                  ]
-        self.results = None        
+                                'iq_range_spread',
+                                'iq_range_bid_depth',
+                                'iq_range_ask_volume',
+                                'iq_range_bid_volume',
+                                'iq_range_weighted_spread',
+                                'iq_range_ask_slope',
+                                'iq_range_bid_slope',
+                                ]
+
+        self.results = None     
         
 
-    def _fit(self, y: pd.Series, X: pd.DataFrame):
+    def fit(self, y: pd.Series, X: pd.DataFrame):
         """
         """
-
-        # scale the data
-        self.scalerX = StandardScaler()
-        # self.scalerY = StandardScaler()
-        self.stored_X = self.scalerX.fit_transform(X.values)
-        # self.stored_y = self.scalerY.fit_transform(y.values.reshape(-1, 1)).flatten()
-        self.stored_y = y.values
+        X = X.loc[:, self.feature_names]
+        
+        self.scaler = StandardScaler()
+        X = self.scaler.fit_transform(X)
 
         self.model = XGBRegressor(
             n_estimators= self.n_estimators,
             max_depth = self.max_depth,
             min_samples_split = self.min_samples_split,
         )
-        self.model.fit(self.stored_X, self.stored_y)
+        self.model.fit(X, y)
+        self.results = self.model
 
-    def _forecast(self, steps: int = 1, X: pd.DataFrame = None):
+    def forecast(self, steps: int = 1, X: pd.DataFrame = None):
         """
         Forecast the next steps volatility.
         """
-        X = X.values[-1, :].reshape(1, -1)
-        X = self.scalerX.transform(X)
+        if self.results is None:
+            raise ValueError("Model not fitted yet. Please fit the model first.")
+        # X = X.loc[:, self.feature_names].values[-1, :].reshape(1, -1)#.iloc[-1:]  # take the last row for forecasting
 
-        return self.model.predict(X)[0]
+        X = X.loc[:, self.feature_names].iloc[-1:]  # take the last row for forecasting
+        X = self.scaler.transform(X)
+
+        #X = X.values[-1, :].reshape(1, -1)
+        #X = self.scalerX.transform(X)
+
+        pred = self.model.predict(X)#[0]
+        return np.exp(pred)
 
 
-    def _update(self, new_y: pd.Series, new_X: pd.DataFrame):
+    def update(self, new_y: pd.Series, new_X: pd.DataFrame):
         """
         Update the model with new data.
         """
-        self.stored_y = np.append(self.stored_y, new_y.values)
-        self.stored_X = np.append(self.stored_X, self.scalerX.transform(new_X.values[-1, :].reshape(1, -1)), axis=0)
-
+        # self.stored_y = np.append(self.stored_y, np.log(new_y.values))
+        # self.stored_X = np.append(self.stored_X, self.scalerX.transform(new_X.values[-1, :].reshape(1, -1)), axis=0)
+        pass
