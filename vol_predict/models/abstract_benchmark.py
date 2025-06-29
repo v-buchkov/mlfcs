@@ -6,20 +6,20 @@ import pandas as pd
 
 from abc import ABC, abstractmethod
 
+
 class AbstractBenchmark(ABC):
     """
     An alternative to `AbstractPredictor` class. It is used to wrap models from
     `arch` and `statsmodels` packages, as well as custom made benchmarks,
     which are not PyTorch models and require a different training
-    and inference process (storing residuals, etc.). 
+    and inference process (storing residuals, etc.).
     """
+
     def __init__(self):
         pass
 
     @abstractmethod
-    def fit(self, 
-            y: pd.Series,
-            X: pd.DataFrame):
+    def fit(self, y: pd.Series, X: pd.DataFrame):
         """
         Fit the model to the data.
 
@@ -32,9 +32,8 @@ class AbstractBenchmark(ABC):
             THEY ARE ONCE LAGGED WITH RESPECT TO y.
         """
 
-
     @abstractmethod
-    def forecast(self, steps: int=1, X: pd.DataFrame=None) -> np.ndarray:
+    def forecast(self, steps: int = 1, X: pd.DataFrame = None) -> np.ndarray:
         """
         Forecast the model for a given number of steps.
 
@@ -46,11 +45,8 @@ class AbstractBenchmark(ABC):
             The volatility and order book features to forecast the model with.
         """
 
-
     @abstractmethod
-    def update(self, 
-               new_y: pd.Series,
-               new_X: pd.DataFrame):
+    def update(self, new_y: pd.Series, new_X: pd.DataFrame):
         """
         Update the model with new data.
 
