@@ -182,3 +182,61 @@ def validation_epoch(
     val_loss /= len(loader.dataset)
 
     return val_loss, np.concatenate(pred_path, axis=0)
+
+
+@torch.no_grad()
+def bayesian_validation_epoch(
+    model: AbstractPredictor,
+    criterion: AbstractCustomLoss,
+    loader: DataLoader,
+    tqdm_desc: str | None = None,
+    hidden_size: int = 128,
+    n_layers: int = 3,
+    n_experiments: int = 100,
+) -> tuple[torch.float32, np.ndarray]:
+    device = next(model.parameters()).device
+
+    if tqdm_desc is None:
+        iterator = loader
+    else:
+        iterator = tqdm(loader, desc=tqdm_desc)
+
+    val_loss = 0.0
+    pred_path = []
+    uncerts = []
+    for features, past_returns, past_vols, true_returns, true_vols in iterator:
+        features = features.to(device)
+        past_returns = past_returns.to(device)
+        past_vols = past_vols.to(device)
+        true_returns = true_returns.to(device)
+        true_vols = true_vols.to(device)
+
+        preds = []
+        for _ in range(n_experiments):
+            pred_vol = model(
+                features=features, past_returns=past_returns, past_vols=past_vols
+            )
+            preds.append(pred_vol)
+
+        preds = torch.stack(preds)
+        pred_vol = preds.mean(dim=0)
+        uncert = preds.std(dim=0)
+        uncerts.append(uncert.detach().cpu().numpy())
+
+        loss = criterion(true_returns, true_vols, pred_vol)
+
+        val_loss += loss.item()
+
+        prediction_points = np.concatenate(
+            (
+                true_returns.cpu().numpy(),
+                true_vols.cpu().numpy(),
+                pred_vol.detach().cpu().numpy(),
+            ),
+            axis=1,
+        )
+        pred_path.append(prediction_points)
+
+    val_loss /= len(loader.dataset)
+
+    return val_loss, np.concatenate(pred_path, axis=0), np.concatenate(uncerts, axis=0)

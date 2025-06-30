@@ -13,7 +13,7 @@ class MLPPredictor(AbstractPredictor):
     ):
         super().__init__()
 
-        self.model = MLP([n_features] + ([hidden_size] * n_layers) + [1])
+        self.model = MLP([1212] + ([hidden_size] * n_layers) + [1])
 
     def _forward(
         self,

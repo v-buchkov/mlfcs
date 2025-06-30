@@ -29,8 +29,15 @@ class ExperimentConfig:
         default="vol", metadata={"docs": "Realized Variance column"}
     )
 
-    RETRAIN_NUM_PERIODS: bool | None = field(
-        default=None,
+    EXPANDING: bool = field(
+        default=True,
+        metadata={
+            "docs": "Number of retrain periods. If `None`, then the model is tested on the whole Test dataset without retraining"
+        },
+    )
+
+    RETRAIN: bool = field(
+        default=True,
         metadata={
             "docs": "Number of retrain periods. If `None`, then the model is tested on the whole Test dataset without retraining"
         },
@@ -43,6 +50,16 @@ class ExperimentConfig:
     TRAIN_START_DATE: pd.Timestamp = field(
         default=pd.Timestamp("2018-06-04"),
         metadata={"docs": "Date to start training"},
+    )
+
+    FIRST_TRAIN_END_DATE: pd.Timestamp = field(
+        default=pd.Timestamp("2018-06-30"),
+        metadata={"docs": "Date to end train"},
+    )
+
+    ROLLING_STEP_DAYS: int = field(
+        default=5,
+        metadata={"docs": "Number of days to take into rolling regression"},
     )
 
     VAL_START_DATE: pd.Timestamp = field(
