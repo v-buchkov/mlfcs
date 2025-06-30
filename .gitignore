@@ -179,4 +179,5 @@ password.sh
 **/**.pkl
 
 data/
+output/
 
