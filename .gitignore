@@ -177,10 +177,7 @@ prod.env
 password.sh
 **/.idea
 **/**.pkl
+
 data/
-data/btc/
 output/
-.gitignore
-!/data/
-data/raw/
-data/btc.zip
+
