@@ -177,7 +177,6 @@ prod.env
 password.sh
 **/.idea
 **/**.pkl
+
 data/
-output/
-.gitignore
-data:/data_df.csv
+

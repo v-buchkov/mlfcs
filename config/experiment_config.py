@@ -10,7 +10,7 @@ import torch
 
 class AvailableDatasets(Enum):
     GBM = Path("gbm") / "gbm.csv"
-    BITCOIN = ""
+    BITCOIN = Path("btc") / "data_df.csv"
     SPX = Path("spx") / "data_df.csv"
 
 
@@ -18,19 +18,29 @@ class AvailableDatasets(Enum):
 class ExperimentConfig:
     # Training Settings
     DATASET: AvailableDatasets = field(
-        default=AvailableDatasets.GBM, metadata={"docs": "Dataset to train on"}
+        default=AvailableDatasets.BITCOIN, metadata={"docs": "Dataset to train on"}
     )
 
-    RETRAIN_NUM_PERIODS: bool | None = field(
-        default=None,
+    RETURN_COLUMN: str = field(
+        default="ret", metadata={"docs": "Realized Return column"}
+    )
+
+    VOL_COLUMN: str = field(
+        default="vol", metadata={"docs": "Realized Variance column"}
+    )
+
+    EXPANDING: bool = field(
+        default=True,
         metadata={
             "docs": "Number of retrain periods. If `None`, then the model is tested on the whole Test dataset without retraining"
         },
     )
 
-    ASSET_UNIVERSE: tuple[str] = field(
-        default=("spx",),
-        metadata={"docs": "Tradeable assets tuple"},
+    RETRAIN: bool = field(
+        default=True,
+        metadata={
+            "docs": "Number of retrain periods. If `None`, then the model is tested on the whole Test dataset without retraining"
+        },
     )
 
     N_FEATURES: int = field(default=12, metadata={"docs": "Fix random seed"})
@@ -38,17 +48,27 @@ class ExperimentConfig:
     RANDOM_SEED: int = field(default=12, metadata={"docs": "Fix random seed"})
 
     TRAIN_START_DATE: pd.Timestamp = field(
-        default=pd.to_datetime("2004-01-01"),
+        default=pd.Timestamp("2018-06-04"),
         metadata={"docs": "Date to start training"},
     )
 
+    FIRST_TRAIN_END_DATE: pd.Timestamp = field(
+        default=pd.Timestamp("2018-06-30"),
+        metadata={"docs": "Date to end train"},
+    )
+
+    ROLLING_STEP_DAYS: int = field(
+        default=5,
+        metadata={"docs": "Number of days to take into rolling regression"},
+    )
+
     VAL_START_DATE: pd.Timestamp = field(
-        default=pd.to_datetime("2021-01-01"),
+        default=pd.Timestamp("2018-09-01"),
         metadata={"docs": "Date to end train"},
     )
 
     TEST_START_DATE: pd.Timestamp = field(
-        default=pd.to_datetime("2022-01-01"),
+        default=pd.Timestamp("2018-09-15"),
         metadata={"docs": "Date to end analysis"},
     )
 
@@ -76,6 +96,11 @@ class ExperimentConfig:
     PATH_OUTPUT: Path = field(
         default=Path(__file__).resolve().parents[1] / "output",
         metadata={"docs": "Relative path to data folder"},
+    )
+
+    RESULTS_FILENAME: str = field(
+        default="results.csv",
+        metadata={"docs": "File with all experimental results"},
     )
 
     # Technical Settings

@@ -15,6 +15,7 @@ class MLPPredictor(AbstractPredictor):
     def _forward(
         self,
         past_returns: torch.Tensor,
+        past_vols: torch.Tensor,
         features: torch.Tensor,
     ) -> torch.Tensor:
         full_features = torch.cat([past_returns, features], dim=1)

@@ -13,13 +13,13 @@ class MLPPredictor(AbstractPredictor):
     ):
         super().__init__()
 
-        self.model = MLP([n_features] + ([hidden_size] * n_layers) + [1])
+        self.model = MLP([1212] + ([hidden_size] * n_layers) + [1])
 
     def _forward(
         self,
         past_returns: torch.Tensor,
+        past_vols: torch.Tensor,
         features: torch.Tensor,
     ) -> torch.Tensor:
-        full_features = torch.cat([past_returns, features], dim=1)
-        std = self.model(full_features)
-        return nn.Softplus()(std)
+        vol = self.model(features)
+        return nn.Softplus()(vol)

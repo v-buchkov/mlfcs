@@ -11,6 +11,8 @@ import torch
 from config.model_config import ModelConfig
 from config.experiment_config import ExperimentConfig
 from vol_predict.runner import Runner
+from vol_predict.sequential_runner import SequentialRunner
+from vol_predict.bayesian_sequential_runner import BayesianSequentialRunner
 from vol_predict.features.base_preprocessor import BasePreprocessor
 
 from vol_predict.models.abstract_predictor import AbstractPredictor
@@ -28,18 +30,40 @@ def initialize_runner(
     )
 
 
+def initialize_sequential_runner(
+    model_config: ModelConfig,
+    preprocessor: BasePreprocessor,
+    experiment_config: ExperimentConfig = ExperimentConfig(),
+) -> SequentialRunner:
+    return SequentialRunner(
+        preprocessor=preprocessor,
+        model_config=model_config,
+        experiment_config=experiment_config,
+    )
+
+
+def initialize_bayesian_sequential_runner(
+    model_config: ModelConfig,
+    preprocessor: BasePreprocessor,
+    experiment_config: ExperimentConfig = ExperimentConfig(),
+) -> BayesianSequentialRunner:
+    return BayesianSequentialRunner(
+        preprocessor=preprocessor,
+        model_config=model_config,
+        experiment_config=experiment_config,
+    )
+
+
 def run_backtest(
     model_cls: Type[AbstractPredictor],
     baseline_cls: Type[AbstractPredictor],
-    model_config: ModelConfig,
-    baseline_config: ModelConfig,
     runner: Runner,
     experiment_config: ExperimentConfig = ExperimentConfig(),
 ) -> RunResult:
     torch.manual_seed(experiment_config.RANDOM_SEED)
 
-    model = model_cls(**model_config.dict())
-    baseline = baseline_cls(**baseline_config.dict())
+    model = model_cls(**runner.model_config.dict())
+    baseline = baseline_cls(**runner.model_config.dict())
 
     run_result = runner(model=model, baseline=baseline)
 
@@ -57,8 +81,7 @@ if __name__ == "__main__":
     print(AvailableDatasets)
 
     config = ExperimentConfig()
-    config.DATASET = AvailableDatasets.SPX
-    config.ASSET_UNIVERSE = ("spx",)
+    config.DATASET = AvailableDatasets.BITCOIN
 
     model_params = ModelConfig()
     baseline_params = ModelConfig()
@@ -75,8 +98,6 @@ if __name__ == "__main__":
     result = run_backtest(
         model_cls=Model,
         baseline_cls=Baseline,
-        model_config=model_params,
-        baseline_config=baseline_params,
         runner=model_runner,
     )
 

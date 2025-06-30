@@ -17,14 +17,24 @@ class AbstractCustomLoss(nn.Module, ABC):
         self.l2_coef = l2_coef
     @abstractmethod
     def forward(
-        self, true_returns: torch.Tensor, pred_vol: torch.Tensor, *args, **kwargs
+        self,
+        true_returns: torch.Tensor,
+        true_vols: torch.Tensor,
+        pred_vol: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> torch.Tensor:
         raise NotImplementedError
 
     def __call__(
-        self, true_returns: torch.Tensor, pred_vol: torch.Tensor, *args, **kwargs
+        self,
+        true_returns: torch.Tensor,
+        true_vols: torch.Tensor,
+        pred_vol: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> torch.Tensor:
-        return self.forward(true_returns, pred_vol, *args, **kwargs)
+        return self.forward(true_returns, true_vols, pred_vol, *args, **kwargs)
 
     def compute_l2(self, model: nn.Module) -> torch.Tensor:
         """
