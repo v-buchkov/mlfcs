@@ -178,6 +178,6 @@ password.sh
 **/.idea
 **/**.pkl
 
-data/
-output/
+data/raw
+data/btc
 

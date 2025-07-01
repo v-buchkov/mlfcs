@@ -180,6 +180,8 @@ class BenchmarkBacktester:
                         t - self.bias_lookback : t - pd.Timedelta(hours=1), "log_vol"
                     ].values
                 )
+                if np.isnan(conditional_log_vola):
+                    conditional_log_vola = 0.0
                 # cond_vola should be variance of residuals but the two are very similar because
                 # of relatively low predictability of volatility
                 pred = pred * np.exp(conditional_log_vola / 2)
