@@ -15,7 +15,7 @@ def positional_encoding(x: torch.Tensor, device: str, n_levels: int) -> torch.Te
         for j in range(pos_final.shape[1]):
             pos_final[i, j, 0] = pos[j]
 
-    pos_final = torch.tensor(pos_final).to(device)
+    pos_final = pos_final.to(device)
     x = torch.cat((x, pos_final), 2)
 
     return x

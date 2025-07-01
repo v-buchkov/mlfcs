@@ -14,12 +14,12 @@ from vol_predict.models.abstract_predictor import AbstractPredictor
 
 def plot_losses(
     train_losses: list[float],
-    val_losses: list[float],
+    val_losses: list[float] | None = None,
     train_preds: list[float] | None = None,
     val_preds: list[float] | None = None,
     n_days: int = 252,
 ):
-    clear_output()
+    # clear_output()
     n_cols = 2 if train_preds is not None or val_preds is not None else 1
     fig, axs = plt.subplots(1, n_cols, figsize=(13, 4))
 
@@ -27,7 +27,8 @@ def plot_losses(
         axs = [axs]
 
     axs[0].plot(range(1, len(train_losses) + 1), train_losses, label="train")
-    axs[0].plot(range(1, len(val_losses) + 1), val_losses, label="val")
+    if val_losses is not None:
+        axs[0].plot(range(1, len(val_losses) + 1), val_losses, label="val")
     axs[0].set_ylabel("Loss")
 
     if train_preds is not None:
@@ -116,7 +117,7 @@ def train_epoch(
                 loss.backward(retain_graph=True)
                 optimizer.step()
 
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
 
         train_loss += loss.item()
         prediction_points = np.concatenate(

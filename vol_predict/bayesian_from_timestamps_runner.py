@@ -2,32 +2,24 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from vol_predict.train.train import validation_epoch
+from vol_predict.train.train import bayesian_validation_epoch
 
 if TYPE_CHECKING:
     from config.experiment_config import ExperimentConfig
     from vol_predict.models.abstract_predictor import AbstractPredictor
-
-from dataclasses import dataclass
 
 import torch
 import numpy as np
 import pandas as pd
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from config.model_config import ModelConfig
 from vol_predict.train.trainer import Trainer
 from vol_predict.features.base_preprocessor import BasePreprocessor
 from vol_predict.dataset.returns_dataset import ReturnsDataset
-from vol_predict.backtest.assessor import AssessmentResult
 from vol_predict.base.returns import Returns
-
-
-@dataclass
-class RunResult:
-    model_result: AssessmentResult
-    baseline_result: AssessmentResult
 
 
 def weights_init(model):
@@ -41,14 +33,17 @@ def weights_init(model):
     return model.to(model.device)
 
 
-class SequentialRunner:
+class BayesianFromTimestampsRunner:
     def __init__(
         self,
+        output_df: pd.DataFrame,
         preprocessor: BasePreprocessor,
         model_config: ModelConfig,
         experiment_config: ExperimentConfig,
         verbose: bool = True,
     ) -> None:
+        self.output = output_df
+
         self.preprocessor = preprocessor
         self.model_config = model_config
         self.experiment_config = experiment_config
@@ -67,6 +62,11 @@ class SequentialRunner:
         data_df = data_df.set_index("datetime")
         data_df.index = data_df.index.tz_localize(None)
         return data_df
+
+    def extract_rebal_schedule(self) -> list[pd.Timestamp]:
+        schedule = self.output[self.output["retraining_flag"]].index.to_list()
+        schedule.append(self.output.index[-1])
+        return schedule
 
     def _initialize(self):
         data = self._load_df()
@@ -92,9 +92,12 @@ class SequentialRunner:
         if self.verbose:
             print(f"Available data from {data.index.min()} to {data.index.max()}")  # noqa: T201
 
+        self.rebal_schedule = self.extract_rebal_schedule()
+
     def _get_dataloader(
-        self, time_start: pd.Timestamp, time_end: pd.Timestamp, is_train: bool = True
+        self, time_start: pd.Timestamp | None, time_end: pd.Timestamp, is_train: bool = True
     ) -> DataLoader:
+        time_start = self.features.loc[:time_start].index[-2] if time_start is not None else self.features.index[0]
         init_features = self.features.loc[time_start:time_end]
 
         if init_features.ndim > 1 and init_features.shape[0] != 0:
@@ -129,34 +132,25 @@ class SequentialRunner:
     def run(
         self,
         model: AbstractPredictor,
-        baseline: AbstractPredictor,
         n_epochs: int | None = None,
     ) -> pd.DataFrame:
-        step = self.experiment_config.ROLLING_STEP_DAYS
         loss = self.model_config.loss.value().to(self.experiment_config.DEVICE)
+        last_rebal_date = self.rebal_schedule[0]
+        uncert_history = []
+        uncerts = 0
+        for rebal_date in (pbar := tqdm(self.rebal_schedule[1:])):
+            # None to train on all data available
+            train_loader = self._get_dataloader(None, last_rebal_date - pd.Timedelta(milliseconds=1), is_train=True)
+            test_loader = self._get_dataloader(last_rebal_date, rebal_date - pd.Timedelta(milliseconds=1), is_train=False)
 
-        train_start = self.experiment_config.TRAIN_START_DATE
-        train_end = self.experiment_config.FIRST_TRAIN_END_DATE
+            pbar.set_description(f"Date: {rebal_date}")
 
-        rolling_results = []
-        while train_end <= self.returns.index[-1]:
-            train_loader = self._get_dataloader(train_start, train_end, is_train=True)
-
-            last_train_end = train_end
-            train_start = (
-                train_start + pd.Timedelta(days=step)
-                if self.experiment_config.EXPANDING
-                else train_start
-            )
-            train_end = train_end + pd.Timedelta(days=step)
-            test_loader = self._get_dataloader(
-                last_train_end + pd.Timedelta(milliseconds=1), train_end, is_train=False
-            )
-
-            if len(train_loader.dataset) > 0 and len(test_loader.dataset) > 0:
+            if len(train_loader.dataset) > 0:
                 if self.experiment_config.RETRAIN:
-                    model = model.__class__(**self.model_config.dict())
-                    baseline = baseline.__class__(**self.model_config.dict())
+                    if np.mean(uncerts) > np.mean(uncert_history) + np.std(
+                        uncert_history
+                    ):
+                        model = model.__class__(**self.model_config.dict())
 
                 model_trainer = Trainer(
                     train_loader=train_loader,
@@ -167,66 +161,26 @@ class SequentialRunner:
 
                 model_trainer(model, n_epochs)
 
-                baseline_trainer = Trainer(
-                    train_loader=train_loader,
-                    val_loader=train_loader,
-                    model_config=self.model_config,
-                    experiment_config=self.experiment_config,
-                )
+            _, preds, uncerts = bayesian_validation_epoch(
+                model,
+                loss,
+                test_loader,
+                hidden_size=self.model_config.hidden_size,
+                n_layers=self.model_config.n_layers,
+            )
+            uncert_history.append(np.mean(uncerts))
+            preds = preds[:, -1]
 
-                baseline_trainer(baseline, n_epochs)
-
-                model_loss, preds = validation_epoch(
-                    model,
-                    loss,
-                    test_loader,
-                    hidden_size=self.model_config.hidden_size,
-                    n_layers=self.model_config.n_layers,
-                )
-                true_returns = preds[:, 0]
-                true_vols = preds[:, 1]
-                model_preds = preds[:, 2]
-                baseline_loss, baseline_preds_full = validation_epoch(
-                    baseline,
-                    loss,
-                    test_loader,
-                    hidden_size=self.model_config.hidden_size,
-                    n_layers=self.model_config.n_layers,
-                )
-                baseline_preds = baseline_preds_full[:, 2]
-
-                rolling_results.append(
-                    [
-                        last_train_end,
-                        model_loss,
-                        baseline_loss,
-                        true_returns,
-                        true_vols,
-                        model_preds,
-                        baseline_preds,
-                    ]
-                )
+            model_name = model.__class__.__name__
+            self.output.loc[last_rebal_date : rebal_date - pd.Timedelta(milliseconds=1), model_name] = preds
 
         torch.save(model.state_dict(), "model.pt")
-        torch.save(baseline.state_dict(), "baseline.pt")
 
-        return pd.DataFrame(
-            rolling_results,
-            columns=[
-                "datetime",
-                "model_loss",
-                "baseline_loss",
-                "true_returns",
-                "true_vols",
-                "model_preds",
-                "baseline_preds",
-            ],
-        ).set_index("datetime")
+        return self.output
 
     def __call__(
         self,
         model: AbstractPredictor,
-        baseline: AbstractPredictor,
         n_epochs: int | None = None,
     ) -> pd.DataFrame:
-        return self.run(model=model, baseline=baseline, n_epochs=n_epochs)
+        return self.run(model=model, n_epochs=n_epochs)

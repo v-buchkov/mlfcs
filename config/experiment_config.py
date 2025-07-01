@@ -37,7 +37,7 @@ class ExperimentConfig:
     )
 
     RETRAIN: bool = field(
-        default=True,
+        default=False,
         metadata={
             "docs": "Number of retrain periods. If `None`, then the model is tested on the whole Test dataset without retraining"
         },

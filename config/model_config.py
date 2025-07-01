@@ -4,7 +4,7 @@ from dataclasses import dataclass, asdict
 import torch
 import torch.nn as nn
 from sklearn.base import BaseEstimator
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
 from vol_predict.loss.abstract_custom_loss import AbstractCustomLoss
 from vol_predict.loss.loss import Loss
@@ -30,7 +30,7 @@ class ModelConfig:
 
     loss: AbstractCustomLoss = Loss.MSE
 
-    scaler: Type[BaseEstimator] = MinMaxScaler()
+    scaler: Type[BaseEstimator] = StandardScaler()
 
     # TODO (V) handle metrics plotting
     metrics: tuple[nn.Module] = (Loss.RMSE,)

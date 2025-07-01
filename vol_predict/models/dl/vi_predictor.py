@@ -14,7 +14,7 @@ class ViPredictor(AbstractPredictor):
         n_features: int,
         n_unique_features: int,
         n_layers: int,
-        n_experiments: int = 20,
+        n_experiments: int = 100,
         *args,
         **kwargs,
     ):
@@ -38,7 +38,6 @@ class ViPredictor(AbstractPredictor):
         self.naive = NaivePredictor()
 
         self.seen_uncerts = []
-        # self.c = 0
 
     def _forward(
         self,
@@ -48,7 +47,6 @@ class ViPredictor(AbstractPredictor):
         *args,
         **kwargs,
     ) -> torch.Tensor:
-        # print(self.c)
 
         out = []
         for _ in range(self.n_experiments):
@@ -56,23 +54,17 @@ class ViPredictor(AbstractPredictor):
         out = torch.stack(out)
 
         lstm_pred = out.mean(dim=0)
-        # print(lstm_pred)
         uncert = out.std(dim=0)
 
         self.seen_uncerts.append(uncert.mean().item())
 
-        # print("Naive")
-        # print(self.naive(past_returns, past_vols, features))
         uncert_scaled = (uncert - min(self.seen_uncerts)) / (
             max(self.seen_uncerts) - min(self.seen_uncerts) + 1e-6
         )
         weight_lstm = 1 - torch.clamp(uncert_scaled, 0, 1) + 1e-6
-        # print(weight_lstm)
 
         pred = weight_lstm * lstm_pred + (1 - weight_lstm) * self.naive(
             past_returns, past_vols, features
         )
-        # print(pred)
-        # self.c += 1
 
         return pred

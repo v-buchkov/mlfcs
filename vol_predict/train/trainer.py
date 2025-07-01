@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from vol_predict.loss.abstract_custom_loss import AbstractCustomLoss
 from vol_predict.models.abstract_predictor import AbstractPredictor
-from vol_predict.train.train import train_epoch, validation_epoch, plot_losses
+from vol_predict.train.train import train_epoch, plot_losses
 from config.model_config import ModelConfig
 from config.experiment_config import ExperimentConfig
 
@@ -41,7 +41,7 @@ class Trainer:
         train_loader: DataLoader,
         val_loader: DataLoader,
         num_epochs: int,
-        print_logs: bool = True,
+        print_logs: bool = False,
     ):
         train_losses, val_losses = [], []
         train_preds, val_preds = [], []
@@ -63,33 +63,33 @@ class Trainer:
                 optimizer,
                 criterion,
                 train_loader,
-                tqdm_desc=desc_train,
+                tqdm_desc=None,
                 hidden_size=self.model_config.hidden_size,
                 n_layers=self.model_config.n_layers,
             )
-            val_loss, val_pred = validation_epoch(
-                model,
-                criterion,
-                val_loader,
-                tqdm_desc=desc_val,
-                hidden_size=self.model_config.hidden_size,
-                n_layers=self.model_config.n_layers,
-            )
+            # val_loss, val_pred = validation_epoch(
+            #     model,
+            #     criterion,
+            #     val_loader,
+            #     tqdm_desc=desc_val,
+            #     hidden_size=self.model_config.hidden_size,
+            #     n_layers=self.model_config.n_layers,
+            # )
 
             if scheduler is not None:
                 scheduler.step()
 
             train_losses += [train_loss]
-            val_losses += [val_loss]
+            # val_losses += [val_loss]
 
             train_preds.append(train_pred)
-            val_preds.append(val_pred)
+            # val_preds.append(val_pred)
 
             # TODO @V: average pred into plot
-            plot_losses(train_losses, val_losses, None, None)
+            plot_losses(train_losses, None, None, None)
 
         train_preds = np.concatenate(train_preds, axis=0)
-        val_preds = np.concatenate(val_preds, axis=0)
+        val_preds = np.concatenate(val_preds, axis=0) if len(val_preds) > 0 else None
 
         return train_losses, val_losses, train_preds, val_preds
 
